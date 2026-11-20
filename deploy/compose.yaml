@@ -1,5 +1,5 @@
 # SuperAwesomeMagicalOrchestrator server: `podman compose up -d` (or `docker compose up -d`).
-# Everything it keeps (accounts, who people follow, what they watched, saved sign-ins, its key) is in ./data.
+# Everything it keeps (accounts, devices, what's waiting for them (sealed), its keys) is in ./data.
 # That folder is private: it's ignored by git (never commit it), and back it up somewhere safe.
 services:
   superawesomemagicalorchestrator:
@@ -8,28 +8,25 @@ services:
     restart: unless-stopped
     ports:
       # Behind a reverse proxy (with SAMO_TRUST_PROXY), publish it on this machine only, so nobody
-      # on the network can reach it around the proxy: "127.0.0.1:8095:8080".
-      - "8095:8080"
+      # on the network can reach it around the proxy: "127.0.0.1:8097:8080".
+      - "8097:8080"
     volumes:
       # :Z relabels the folder for SELinux (Fedora, RHEL); harmless elsewhere.
       - ./data:/data:Z
     environment:
       # The address people use, needed for single sign-on behind a reverse proxy.
-      # SAMO_PUBLIC_URL: https://video.example.com
+      # SAMO_PUBLIC_URL: https://orchestrator.example.com
       # SAMO_TRUST_PROXY: "true"
       # Behind Cloudflare, so each visitor's own address is known:
       # SAMO_CLIENT_IP_HEADER: CF-Connecting-IP
       # The break-glass admin's first password (otherwise one is generated and printed once on the console).
       # SAMO_ADMIN_PASSWORD:
-      # Where videos come from (also on the admin page):
-      # SAMO_YOUTUBE: "true"
-      # SAMO_FEDERATED_PROXY: "true"
-      # SAMO_SEARCH_INDEX: https://sepiasearch.org
-      # SAMO_PEERTUBE_INSTANCES: tilvids.com,video.blender.org
+      # The family's servers, so signed-in devices find them and can sign in to them (also on the admin page):
+      # SAMO_APPS: music=https://music.example.com,health=https://health.example.com,video=https://video.example.com
       # Single sign-on with Authentik, if you'd rather set it here than on the admin page:
       # SAMO_OIDC_ISSUER: https://auth.example.com/application/o/superawesomemagicalorchestrator/
       # SAMO_OIDC_CLIENT_ID: ...
       # SAMO_OIDC_CLIENT_SECRET: ...
-      # SAMO_OIDC_USER_GROUP: video-users
-      # SAMO_OIDC_ADMIN_GROUP: video-admins
+      # SAMO_OIDC_USER_GROUP: family
+      # SAMO_OIDC_ADMIN_GROUP: family-admins
       TZ: America/New_York

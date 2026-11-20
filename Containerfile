@@ -37,6 +37,6 @@ VOLUME /data
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD wget -qO /dev/null http://127.0.0.1:8080/api/health || exit 1
 LABEL org.opencontainers.image.title="SuperAwesomeMagicalOrchestrator" \
-      org.opencontainers.image.description="YouTube and PeerTube in one feed, through your own server: no ads, no trackers, no Shorts" \
+      org.opencontainers.image.description="Sign in once on each device: every app signed in, notifications, clipboard and links shared between your devices" \
       org.opencontainers.image.licenses="GPL-3.0-only"
 ENTRYPOINT ["/sbin/tini", "--", "/opt/samo/bin/samo-server"]

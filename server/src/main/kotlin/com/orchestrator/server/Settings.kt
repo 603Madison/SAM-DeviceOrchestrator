@@ -29,7 +29,7 @@ data class OidcSettings(
 @Serializable
 data class ServerSettings(
     val serverName: String = "SuperAwesomeMagicalOrchestrator",
-    /** The address people reach the server at, e.g. https://video.example.com (for sign-in redirects). */
+    /** The address people reach the server at, e.g. https://orchestrator.example.com (for sign-in redirects, and the issuer of every ticket). */
     val publicUrl: String = "",
     /** Whether accounts other than the break-glass admin may sign in with a password. */
     val localLogin: Boolean = true,

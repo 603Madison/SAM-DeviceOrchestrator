@@ -33,7 +33,7 @@ class OidcTest {
 
     /** What the fake provider puts in the next ID token. */
     @Volatile private var nonce = ""
-    @Volatile private var groups = listOf("video")
+    @Volatile private var groups = listOf("family")
     @Volatile private var subject = "user-123"
     @Volatile private var tokenIssuer: String? = null
     @Volatile private var signingKey: RSAKey = key
@@ -88,7 +88,7 @@ class OidcTest {
         return SignedJWT(JWSHeader.Builder(JWSAlgorithm.RS256).keyID("k1").build(), claims).apply { sign(RSASSASigner(signingKey)) }.serialize()
     }
 
-    private suspend fun Services.configure(userGroup: String = "video", adminGroup: String = "video-admins") {
+    private suspend fun Services.configure(userGroup: String = "family", adminGroup: String = "family-admins") {
         settings.update {
             it.copy(oidc = it.oidc.copy(enabled = true, issuer = issuer, clientId = "samo-client", userGroup = userGroup, adminGroup = adminGroup))
         }
@@ -156,10 +156,10 @@ class OidcTest {
     @Test
     fun `the admin group makes admins, and roles follow the groups at each sign-in`() = serverTest { services ->
         services.configure()
-        groups = listOf("video-admins")
+        groups = listOf("family-admins")
         signIn()
         assertEquals(Role.ADMIN, services.users.byUsername("maddie")!!.role)
-        groups = listOf("video")
+        groups = listOf("family")
         signIn()
         assertEquals(Role.USER, services.users.byUsername("maddie")!!.role)
         assertEquals(2L, services.users.count()) // the same account both times

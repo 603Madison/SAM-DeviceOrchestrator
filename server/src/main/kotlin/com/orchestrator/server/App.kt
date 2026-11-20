@@ -93,7 +93,7 @@ fun Application.module(services: Services) {
     // Who has which devices is never kept in a browser's or a proxy's cache (a shared computer's disk, say).
     install(
         io.ktor.server.application.createApplicationPlugin("NoStoreApi") {
-            // At the end, where a route hasn't said otherwise (pictures and video say their own).
+            // At the end, where a route hasn't said otherwise (the ticket keys say their own).
             onCallRespond { call, _ ->
                 if (call.request.path().startsWith("/api/") && call.response.headers[HttpHeaders.CacheControl] == null) {
                     call.response.header(HttpHeaders.CacheControl, "private, no-store")
