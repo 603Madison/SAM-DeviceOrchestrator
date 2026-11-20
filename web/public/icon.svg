@@ -1,17 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The family's mark (twin sparkles: a big four-point one fading from the aurora's purple into
+       its green, a small green one beside it), the same paths as SuperAwesomeMagicalLinux's, on
+       the family's slate with a soft aurora glow. -->
   <defs>
-    <linearGradient id="a" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#5b3fd1"/>
-      <stop offset="1" stop-color="#0f9d77"/>
+    <linearGradient id="a" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="124">
+      <stop offset="0" stop-color="#cfbdff"/>
+      <stop offset="0.55" stop-color="#9f8cff"/>
+      <stop offset="1" stop-color="#6ef2b0"/>
     </linearGradient>
-    <radialGradient id="g" cx="0.2" cy="0.1" r="0.9">
-      <stop offset="0" stop-color="#b9a6ff" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#b9a6ff" stop-opacity="0"/>
+    <radialGradient id="p" cx="0.15" cy="0.05" r="0.95">
+      <stop offset="0" stop-color="#5b3fd1" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#5b3fd1" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="g" cx="0.95" cy="1" r="0.8">
+      <stop offset="0" stop-color="#0b7a4f" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#0b7a4f" stop-opacity="0"/>
     </radialGradient>
   </defs>
-  <rect width="512" height="512" rx="116" fill="url(#a)"/>
+  <rect width="512" height="512" rx="116" fill="#0b1220"/>
+  <rect width="512" height="512" rx="116" fill="url(#p)"/>
   <rect width="512" height="512" rx="116" fill="url(#g)"/>
-  <rect x="104" y="148" width="304" height="216" rx="44" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="30"/>
-  <path d="M148 148h216a44 44 0 0 1 44 44" fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round"/>
-  <path d="M230 206v100l84-50z" fill="#ffffff" stroke="#ffffff" stroke-width="18" stroke-linejoin="round"/>
+  <g transform="translate(88 88) scale(2.625)">
+    <path fill="url(#a)" d="M56 12C61 56 72 67 116 72C72 77 61 88 56 124C51 88 40 77 4 72C40 67 51 56 56 12Z"/>
+    <path fill="#6ef2b0" d="M106 4C108 17 111 20 124 22C111 24 108 27 106 40C104 27 101 24 88 22C101 20 104 17 106 4Z"/>
+  </g>
 </svg>

@@ -2,6 +2,7 @@ package com.orchestrator.server.auth
 
 import com.orchestrator.server.ApiError
 import com.orchestrator.server.Services
+import com.orchestrator.server.devices.announceDevices
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
 import io.ktor.http.HttpHeaders
@@ -185,7 +186,14 @@ fun Route.authRoutes(services: Services) {
         }
         delete("/sessions/{id}") {
             val user = call.requireUser(services)
-            if (!services.sessions.revoke(user.id, call.parameters["id"].orEmpty())) throw ApiError.notFound()
+            val id = call.parameters["id"].orEmpty()
+            // A device's sign-in: ending it removes the device, so its line ends and the others hear.
+            val device = services.devices.bySession(id)?.takeIf { services.devices.byId(user.id, it.id) != null }
+            if (!services.sessions.revoke(user.id, id)) throw ApiError.notFound()
+            if (device != null) {
+                services.hub.drop(device.id)
+                services.announceDevices(user.id)
+            }
             call.respond(mapOf("ok" to true))
         }
     }

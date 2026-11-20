@@ -78,7 +78,8 @@ The server closes the line when the device is removed. Reconnect with a growing 
     -> {"delivered": ["<ids connected now>"], "queued": ["<ids it's waiting for>"]}
 
 One sealed copy for each receiving device. `collapseKey`: a newer one replaces an undelivered
-older one from the same sender (use `"clipboard"`, `"activity:<app>"`; notifications: none).
+older one from the same sender (use `"clipboard"`, `"ring"`, `"activity:<app>"`; notifications:
+none).
 `ttlSeconds`: notifications 86400, dismissals 86400, clipboard 600, links 604800, ring 300,
 activity 900.
 

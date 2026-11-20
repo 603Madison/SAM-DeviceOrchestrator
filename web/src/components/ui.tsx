@@ -1,0 +1,422 @@
+import { Children, Fragment, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, ChevronRight, X } from "lucide-react";
+import { create } from "zustand";
+import { backFor } from "../lib/nav";
+
+// ---- Buttons ----
+
+type Variant = "primary" | "tonal" | "ghost" | "danger";
+
+export function Button({ variant = "tonal", busy, children, className = "", ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; busy?: boolean }) {
+  return (
+    <button {...rest} disabled={rest.disabled || busy} className={`btn btn-${variant} ${busy ? "is-busy" : ""} ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+export function IconButton({ label, children, className = "", active, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; active?: boolean }) {
+  return (
+    <button {...rest} aria-label={label} title={label} className={`icon-btn ${active ? "is-active" : ""} ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+// ---- Form fields ----
+
+export function Field({ label, help, children }: { label: string; help?: ReactNode; children: ReactNode }) {
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      {children}
+      {help && <span className="field-help">{help}</span>}
+    </label>
+  );
+}
+
+/** A typed number: null for nothing, undefined for something that isn't a number (yet). A comma works as the point. */
+export function readNumber(text: string): number | null | undefined {
+  const t = text.trim().replace(",", ".");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * A number field that keeps what's typed as it is ("7.", "0,5") while it's being typed, passing
+ * on each value that reads as a number (null when emptied), and shows [format]ted [value] again
+ * once it's left.
+ */
+export function NumberInput({ value, onChange, format = String, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
+  value: number | null | undefined; onChange: (n: number | null) => void; format?: (n: number) => string;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const shown = value == null || !Number.isFinite(value) ? "" : format(value);
+  return (
+    <input inputMode="decimal" {...rest} value={text ?? shown}
+      onFocus={(e) => { setText(shown); rest.onFocus?.(e); }}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = readNumber(e.target.value);
+        if (n !== undefined) onChange(n);
+      }}
+      onBlur={(e) => { setText(null); rest.onBlur?.(e); }} />
+  );
+}
+
+export function Toggle({ checked, onChange, label, help, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; help?: ReactNode; disabled?: boolean }) {
+  return (
+    <label className={`toggle ${disabled ? "is-disabled" : ""}`}>
+      <span className="toggle-text">
+        <span>{label}</span>
+        {help && <span className="field-help">{help}</span>}
+      </span>
+      <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span className="toggle-track" aria-hidden />
+    </label>
+  );
+}
+
+// ---- Dialogs ----
+
+/** What Tab can reach in a dialog. */
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+export function Modal({ title, onClose, children, footer, wide, sheet, subtitle, className = "" }: {
+  title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean;
+  /** On phones, a sheet from the bottom of the screen. */
+  sheet?: boolean;
+  subtitle?: ReactNode;
+  className?: string;
+}) {
+  const dialog = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close.current();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // Focus goes into the dialog (unless something in it asked for it), and back where it was after.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    if (!dialog.current?.contains(document.activeElement)) dialog.current?.focus();
+    return () => { if (before && document.contains(before)) before.focus(); };
+  }, []);
+  // Tab and Shift+Tab go round the dialog's own controls, never out behind it.
+  const trap = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab" || !dialog.current) return;
+    const all = [...dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+    if (all.length === 0) { e.preventDefault(); return; }
+    const first = all[0];
+    const last = all[all.length - 1];
+    const here = document.activeElement;
+    if (e.shiftKey && (here === first || here === dialog.current)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && here === last) { e.preventDefault(); first.focus(); }
+  };
+  return createPortal(
+    <div className={`modal-backdrop ${sheet ? "has-sheet" : ""}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={dialog} tabIndex={-1} className={`modal ${wide ? "modal-wide" : ""} ${sheet ? "modal-sheet" : ""} ${className}`} role="dialog" aria-modal aria-label={title} onKeyDown={trap}>
+        <div className="modal-head">
+          <div>
+            <h2>{title}</h2>
+            {subtitle && <p className="modal-subtitle">{subtitle}</p>}
+          </div>
+          <IconButton label="Close" onClick={onClose}><X size={20} /></IconButton>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-foot">{footer}</div>}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ---- Menus ----
+
+export interface MenuItem {
+  label: string;
+  icon?: ReactNode;
+  onSelect?: () => void;
+  danger?: boolean;
+  /** A submenu, shown in place. */
+  items?: MenuItem[];
+  disabled?: boolean;
+}
+
+export function Menu({ trigger, items, label, buttonClass = "icon-btn" }: { trigger: ReactNode; items: MenuItem[]; label: string; buttonClass?: string }) {
+  const [open, setOpen] = useState(false);
+  const [stack, setStack] = useState<MenuItem[][]>([]);
+  const [pos, setPos] = useState({ top: 0, left: 0, up: false });
+  const button = useRef<HTMLButtonElement>(null);
+  const list = stack.length ? stack[stack.length - 1] : items;
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => { setOpen(false); setStack([]); };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", close);
+    document.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (open) { setOpen(false); setStack([]); return; }
+    const rect = button.current!.getBoundingClientRect();
+    const up = rect.bottom > window.innerHeight - 280;
+    setPos({ top: up ? rect.top : rect.bottom + 4, left: Math.min(rect.right, window.innerWidth - 8), up });
+    setOpen(true);
+  };
+
+  return (
+    <>
+      <button ref={button} className={buttonClass} aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
+        {trigger}
+      </button>
+      {open && createPortal(
+        <div className="menu-backdrop" onMouseDown={() => { setOpen(false); setStack([]); }}>
+          <div
+            className={`menu ${pos.up ? "menu-up" : ""}`}
+            role="menu"
+            style={{ top: pos.up ? undefined : pos.top, bottom: pos.up ? window.innerHeight - pos.top + 4 : undefined, right: window.innerWidth - pos.left }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {stack.length > 0 && (
+              <button className="menu-item menu-back" onClick={() => setStack(stack.slice(0, -1))}>‹ Back</button>
+            )}
+            {list.map((item, i) => (
+              <button
+                key={i}
+                role="menuitem"
+                disabled={item.disabled}
+                className={`menu-item ${item.danger ? "is-danger" : ""}`}
+                onClick={() => {
+                  if (item.items) { setStack([...stack, item.items]); return; }
+                  setOpen(false);
+                  setStack([]);
+                  item.onSelect?.();
+                }}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                {item.items && <span className="menu-more">›</span>}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+// ---- Toasts ----
+
+interface Toast {
+  id: number;
+  message: string;
+  kind: "info" | "error";
+  /** One thing to do about it ("Undo"); the toast stays a little longer. */
+  action?: { label: string; run: () => void };
+}
+
+const useToasts = create<{ toasts: Toast[] }>(() => ({ toasts: [] }));
+let toastId = 0;
+
+export function toast(message: string, kind: "info" | "error" = "info", action?: Toast["action"]) {
+  const id = ++toastId;
+  useToasts.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, message, kind, action }] }));
+  setTimeout(() => useToasts.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), kind === "error" || action ? 6000 : 3500);
+}
+
+function dismissToast(id: number) {
+  useToasts.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+}
+
+export function errorToast(e: unknown) {
+  toast(e instanceof Error ? e.message : String(e), "error");
+}
+
+export function Toasts() {
+  const toasts = useToasts((s) => s.toasts);
+  return (
+    <div className="toasts" role="status" aria-live="polite">
+      {toasts.map((t) => (
+        <div key={t.id} className={`toast toast-${t.kind} ${t.action ? "has-action" : ""}`}>
+          <span>{t.message}</span>
+          {t.action && <button type="button" className="toast-action" onClick={() => { dismissToast(t.id); t.action!.run(); }}>{t.action.label}</button>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Bits ----
+
+/**
+ * A name made of words run together ("SuperAwesomeMagicalMusic"), which may break between them
+ * where the line is too short for all of it. Only ever text: nothing in [text] is read as markup.
+ */
+export function Breakable({ text }: { text: string }) {
+  const parts = text.split(/(?<=[a-z])(?=[A-Z])/);
+  return <>{parts.map((part, i) => <Fragment key={i}>{i > 0 && <wbr />}{part}</Fragment>)}</>;
+}
+
+export function Spinner({ size = 20 }: { size?: number }) {
+  return <span className="spinner" style={{ width: size, height: size }} aria-label="Loading" />;
+}
+
+export function Empty({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
+  return (
+    <div className="empty">
+      {icon && <div className="empty-icon">{icon}</div>}
+      <h3>{title}</h3>
+      {children && <div className="empty-text">{children}</div>}
+    </div>
+  );
+}
+
+/**
+ * Every page's header: a back arrow (unless it's one of the tab roots), the title and a line
+ * under it, and the page's actions on the right. Back goes back where the person came from in the
+ * app, or (opened straight from a link) to the page's parent (lib/nav.ts's backFor); [back] sets
+ * the parent, or null for none.
+ */
+export function PageHeader({ title, subtitle, actions, back }: { title: string; subtitle?: ReactNode; actions?: ReactNode; back?: { to: string; label: string } | null }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const parent = back === undefined ? backFor(location.pathname) : back;
+  return (
+    <header className={`page-header ${parent ? "" : "is-root"}`}>
+      <div className="page-heading">
+        {parent && (
+          <button type="button" className="icon-btn page-back" aria-label="Back" title="Back"
+            onClick={() => (location.key !== "default" ? navigate(-1) : navigate(parent.to))}>
+            <ArrowLeft size={22} />
+          </button>
+        )}
+        <div className="page-titles">
+          <h1>{title}</h1>
+          {subtitle && <p className="page-subtitle">{subtitle}</p>}
+        </div>
+      </div>
+      {actions && <div className="page-actions">{actions}</div>}
+    </header>
+  );
+}
+
+/** One row of a menu (You): an icon if it helps, a title and one line under it, a badge, and a chevron. Opens [to]. */
+export function MenuRow({ to, icon, title, sub, onClick }: {
+  to: string; icon?: ReactNode; title: string; sub?: ReactNode; onClick?: () => void;
+}) {
+  return (
+    <Link to={to} className={`menu-row ${icon ? "" : "no-icon"}`} onClick={onClick}>
+      {icon && <span className="menu-row-icon" aria-hidden="true">{icon}</span>}
+      <span className="menu-row-text">
+        <span className="menu-row-title">{title}</span>
+        {sub && <span className="menu-row-sub">{sub}</span>}
+      </span>
+      <ChevronRight size={20} className="menu-row-chevron" aria-hidden="true" />
+    </Link>
+  );
+}
+
+/** A titled group of [MenuRow]s on one card. */
+export function MenuGroup({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <section className="menu-group" aria-label={title}>
+      {title && <h2 className="menu-group-title">{title}</h2>}
+      <div className="menu-card">{children}</div>
+    </section>
+  );
+}
+
+/** Runs [load] when [deps] change; gives the result, any error, and a way to run it again. */
+export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): { data: T | undefined; error: string | null; loading: boolean; reload: () => void; setData: (d: T) => void } {
+  const [data, setData] = useState<T>();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    load().then(
+      (d) => { if (!cancelled) { setData(d); setError(null); setLoading(false); } },
+      (e) => { if (!cancelled) { setError(e instanceof Error ? e.message : String(e)); setLoading(false); } },
+    );
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...deps, tick]);
+  return { data, error, loading, reload: () => setTick((t) => t + 1), setData };
+}
+
+// ---- Cards ----
+
+/**
+ * A rounded card on the surface. Its heading row is always the same: the title (with its icon) on
+ * the left; on the right, at most one action (a primary icon button), then a chevron that opens
+ * the page it's about ([link], named for screen readers). A card with nothing in it is a slim
+ * row: the title and its action.
+ */
+export function Card({ title, icon, action, link, children, className = "", onClick, id, heading: Heading = "h3" }: {
+  title?: ReactNode; icon?: ReactNode; action?: ReactNode; link?: { to: string; label: string }; children?: ReactNode; className?: string; onClick?: () => void; id?: string;
+  /** The title's heading level: h2 where cards sit straight under the page's h1 (Today). */
+  heading?: "h2" | "h3";
+}) {
+  const slim = Children.toArray(children).length === 0;
+  const head = (title || action || link) && (
+    <div className="card-head">
+      {title && <Heading className="card-heading">{icon}{title}</Heading>}
+      {(action || link) && (
+        <div className="card-action">
+          {action}
+          {link && <Link className="icon-btn card-open" to={link.to} aria-label={link.label} title={link.label}><ChevronRight size={20} /></Link>}
+        </div>
+      )}
+    </div>
+  );
+  if (onClick) {
+    return (
+      <section id={id} className={`panel-card is-clickable ${className}`} onClick={onClick} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onClick())} role="button" tabIndex={0}>
+        {head}{children}
+      </section>
+    );
+  }
+  return <section id={id} className={`panel-card ${slim ? "is-slim" : ""} ${className}`}>{head}{children}</section>;
+}
+
+/** The one primary action in a card's heading row: a round icon button with its name for screen readers. */
+export function CardAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return <button type="button" className="icon-btn card-primary" aria-label={label} title={label} onClick={onClick}>{children}</button>;
+}
+
+/** Choose one of a few: a row of pills. */
+export function Segmented<T extends string | number>({ options, value, onChange, label }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; label: string }) {
+  return (
+    <div className="tabs" role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} className={o.value === value ? "is-active" : ""} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="notice notice-error notice-row" role="alert">
+      <span>{message}</span>
+      {onRetry && <Button variant="ghost" onClick={onRetry}>Try again</Button>}
+    </div>
+  );
+}
