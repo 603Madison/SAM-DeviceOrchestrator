@@ -232,10 +232,34 @@ if as A "$sam" devices > /dev/null 2> "$work/err"; then fail "devices should fai
 grep -q "Nobody's signed in" "$work/err" || fail "devices, signed out, should say so: $(cat "$work/err")"
 ok "devices fails, in words, when nobody's signed in"
 
+step "A: a sign-in through the browser shows its pairing code"
+orchestrator A SignIn "$server" > /dev/null
+is A .signingIn true || fail "a sign-in should be waiting"
+wait_for 10 "the browser is sent to the server's connect-app" grep -q "^$server/connect-app?challenge=" "$work/A/xdg-open.log"
+challenge=$(grep -o 'challenge=[A-Za-z0-9_-]*' "$work/A/xdg-open.log" | head -n 1 | cut -d= -f2)
+# docs/PROTOCOL.md: n = (n * 64 + the character's index in A–Z a–z 0–9 - _) mod 1000000, shown as "123 456".
+alphabet=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_
+n=0
+for ((i = 0; i < ${#challenge}; i++)); do
+    before=${alphabet%%"${challenge:i:1}"*}
+    n=$(((n * 64 + ${#before}) % 1000000))
+done
+expected=$(printf '%03d %03d' $((n / 1000)) $((n % 1000)))
+is A .pairingCode "$expected" || fail "Status should carry the pairing code $expected: $(status A)"
+is A .signInUrl "$(grep '^http' "$work/A/xdg-open.log" | head -n 1)" || fail "Status should say where the browser was sent"
+as A "$sam" status | grep -q "with the code $expected" || fail "status in words should show the code"
+ok "Status carries pairingCode ($expected), worked out here from the challenge the browser was given"
+orchestrator A SignOut > /dev/null
+is A '.signingIn or has("pairingCode") or has("signInUrl")' false || fail "the waiting sign-in should be given up"
+ok "given up: no code or address left in Status"
+if echo not-a-token | as A "$sam" sign-in --token-stdin http://192.0.2.1:9 > /dev/null 2> "$work/err"; then fail "a server that isn't there"; fi
+grep -q "isn't https" "$work/err" || fail "an http:// server elsewhere should come with a warning: $(cat "$work/err")"
+ok "an http:// server that isn't this computer comes with a warning"
+
 step "A: signing in with a token on standard input, the agent already running"
 token_for "computer A" | as A "$sam" sign-in --token-stdin "$server" > "$work/out" 2> "$work/err" || fail "sign-in: $(cat "$work/err")"
-grep -q "isn't https" "$work/err" || fail "an http:// server should come with a warning"
-ok "warned that the server isn't https"
+grep -q "isn't https" "$work/err" && fail "this computer's own address (127.0.0.1) needs no http warning"
+ok "no http warning for a server on this computer itself"
 grep -q "You're signed in as Maddie (maddie)" "$work/out" || fail "sign-in said: $(cat "$work/out")"
 wait_for 15 "A is signed in and connected (the running agent picked it up)" is A '.signedIn and .connected' true
 [ "$(stat -c %a "$work/A/state/superawesomemagical/orchestrator")" = 700 ] || fail "the sign-in's folder should be 0700"

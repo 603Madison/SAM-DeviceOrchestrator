@@ -36,6 +36,9 @@ moment). The agent swaps the code for its token:
     POST /api/auth/app/token   {"code": "...", "verifier": "...", "deviceName": "..."}
     -> {"user": {...}, "token": "..."}
 
+The break-glass admin can sign a device in but gets no tickets, and an account with a temporary
+password an admin set must choose its own before a device can register.
+
 Then it registers (and again whenever its name or key changes):
 
     POST /api/devices   Authorization: Bearer <token>
@@ -48,6 +51,7 @@ All with `Authorization: Bearer <token>`; JSON; errors are `{"error": "words for
 
 | | |
 |---|---|
+| `GET /api/devices/me` | This device. 401: signed out. 403: signed in but not registered (register again). |
 | `GET /api/devices` | The person's devices: `id, name, kind, model, publicKey, capabilities, online, lastSeenAt, battery {level, charging}, current`. |
 | `PATCH /api/devices/{id}` `{"name"}` | Rename. |
 | `DELETE /api/devices/{id}` | Remove: signs that device out. |
@@ -120,7 +124,7 @@ JSON, with a `type`. Skip types you don't know.
 
 | type | fields | meaning |
 |---|---|---|
-| `notification` | `key, app, appId, title, text, at, icon?` (icon: PNG, base64, 64 px at most, 8 KB at most) | Show this notification here too. `key` is stable on the sender. Show it marked with the sending device's name. |
+| `notification` | `key, app, appId, title, text, at, icon?` (icon: PNG, base64, 64 px at most, 8 KB at most) | Show this notification here too. `key` is `<the sending device's id>:<its own stable id for the notification>`, so keys never collide between devices. Show it marked with the sending device's name. |
 | `dismiss` | `key` | It was dismissed there: remove it here. Send this too when the person dismisses a mirrored one here, to every other device (the origin then removes the real one). |
 | `clipboard` | `text` | Put it on the clipboard. |
 | `link` | `url, title` | Open it (http/https open in the browser; other schemes only if an installed app of the family handles them). |
@@ -179,9 +183,20 @@ interface `app.superawesomemagical.Orchestrator1`. The service is D-Bus activate
 | `Activities() → s` | JSON `[{"device","deviceName","app","title","detail","url","at"}]`: what's happening on the other devices. |
 | `SignIn(s server)`, `SignOut()` | |
 
-Signals: `Changed()` (status or devices), `ActivitiesChanged()`.
+| `Settings() → s`, `SetSetting(s key, s value)` | JSON `{"notificationsOut","notificationsIn","clipboard","links","neverMirror":[]}`; values `"true"`/`"false"`, `neverMirror` a JSON list or comma-separated app names. |
+| `Reload()` | Reads its files again (the command uses it after signing in by itself). |
 
-The same from a shell: `sam-orchestrator status|devices|apps|sign-in <server>|sign-out|ticket <app>|send-link <device> <url>|send-clipboard [device]|ring <device>` (`--json` where it prints).
+`SignIn` answers at once, once the browser is on its way; `Status` then also has `signingIn`,
+`signInUrl`, `pairingCode`, and afterwards `error` if it didn't work. Watch `Changed`.
+
+Signals: `Changed()` (status, settings or devices), `ActivitiesChanged()`.
+
+The same from a shell: `sam-orchestrator status|devices|apps|sign-in <server>|sign-out|ticket <app>|send-link <device> <url>|send-clipboard [device]|ring <device>` (`--json` where it prints), and `activities`, `settings [key value]`, `ring --stop <device>`,
+`sign-in --token-stdin <server>` (a machine with no browser). A device is named by its name, the
+start of it, or its id.
+
+Anything running as the person can call these, as it could read their browser's cookies: on a
+desktop the session is the boundary (on Android each app is asked about).
 
 ### Android (a content provider)
 

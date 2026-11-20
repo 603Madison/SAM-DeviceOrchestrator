@@ -100,6 +100,8 @@ struct State {
     devices: Vec<Device>,
     /// Where the browser was sent, while a sign-in is under way.
     signing_in: Option<String>,
+    /// The pairing code the sign-in page shows too.
+    pairing_code: String,
     sign_in_task: Option<AbortHandle>,
     /// Why the last sign-in didn't work.
     error: String,
@@ -212,6 +214,7 @@ impl Agent {
         });
         if let Some(url) = &state.signing_in {
             status["signInUrl"] = json!(url);
+            status["pairingCode"] = json!(state.pairing_code);
         }
         if !state.error.is_empty() {
             status["error"] = json!(state.error);
@@ -274,10 +277,12 @@ impl Agent {
         let waiting = signin::start(&server, &system::device_name())
             .await
             .map_err(|e| Error::Failed(format!("{e:#}")))?;
-        let url = waiting.url.clone();
+        let (url, code) = (waiting.url.clone(), waiting.pairing_code.clone());
         let before = self.api().ok();
         let agent = self.clone();
         let task = tokio::spawn(async move {
+            // A moment for whoever asked to show the pairing code before the page appears.
+            tokio::time::sleep(Duration::from_millis(800)).await;
             if let Err(why) = system::open(&waiting.url).await {
                 log!("couldn't open the browser ({why}); the address to open is in Status");
             }
@@ -285,6 +290,7 @@ impl Agent {
             {
                 let mut state = agent.state();
                 state.signing_in = None;
+                state.pairing_code.clear();
                 state.sign_in_task = None;
                 state.error = result.as_ref().err().map(|e| format!("{e:#}")).unwrap_or_default();
             }
@@ -307,6 +313,7 @@ impl Agent {
                 earlier.abort();
             }
             state.signing_in = Some(url);
+            state.pairing_code = code;
             state.error.clear();
         }
         self.emit("Changed").await;
@@ -321,6 +328,7 @@ impl Agent {
                 task.abort();
             }
             state.signing_in = None;
+            state.pairing_code.clear();
             state.error.clear();
             state.credentials.forget();
             state.connected = false;
@@ -1287,7 +1295,7 @@ pub struct Orchestrator {
 
 #[zbus::interface(name = "app.superawesomemagical.Orchestrator1")]
 impl Orchestrator {
-    /// JSON: `{"signedIn", "server", "username", "displayName", "connected", "device": {"id", "name"}, "signingIn", "signInUrl"?, "error"?}`.
+    /// JSON: `{"signedIn", "server", "username", "displayName", "connected", "device": {"id", "name"}, "signingIn", "signInUrl"?, "pairingCode"?, "error"?}`.
     #[zbus(out_args("status"))]
     async fn status(&self) -> String {
         self.agent.status().to_string()

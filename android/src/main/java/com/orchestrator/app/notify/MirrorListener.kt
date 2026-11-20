@@ -55,7 +55,7 @@ class MirrorListener : NotificationListenerService() {
         val choices = MirrorChoices(settings.mirrorOut, settings.appsOff, settings.appsOn)
         if (!NotificationRules.verdict(posted, packageName, choices).mirrored) return
         val payload = Payload.Notification(
-            key = sbn.key,
+            key = wireKey(settings.deviceId, sbn.key),
             app = c.appNames.label(sbn.packageName),
             appId = sbn.packageName,
             title = title.take(200),
@@ -76,10 +76,20 @@ class MirrorListener : NotificationListenerService() {
         // Only what went out is taken back, and only when the person or the app took it away: not
         // when the listener is being disconnected, a channel is banned, the profile is locked…
         val wasSent = c.outbox.forget(sbn.key)
-        if (wasSent && reason in TAKEN_AWAY && c.settings.value.signedIn) c.sendDismiss(sbn.key)
+        if (wasSent && reason in TAKEN_AWAY && c.settings.value.signedIn) c.sendDismiss(wireKey(c.settings.value.deviceId, sbn.key))
     }
 
     companion object {
+        /**
+         * A notification's key as other devices know it: this phone's id, then Android's key, so
+         * keys from different devices never collide (a dismissal names only the key).
+         */
+        fun wireKey(deviceId: String, key: String): String = "$deviceId:$key"
+
+        /** Android's key for [wireKey] if it's one of this phone's own, else null. */
+        fun ownKey(deviceId: String, wireKey: String): String? =
+            wireKey.removePrefix("$deviceId:").takeIf { deviceId.isNotEmpty() && it != wireKey }
+
         /** The person swiped it, tapped it, cleared all, or the app withdrew it. */
         val TAKEN_AWAY = setOf(REASON_CLICK, REASON_CANCEL, REASON_CANCEL_ALL, REASON_APP_CANCEL, REASON_APP_CANCEL_ALL)
 

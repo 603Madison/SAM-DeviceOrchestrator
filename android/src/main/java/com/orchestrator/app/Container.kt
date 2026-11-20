@@ -76,7 +76,7 @@ class Container(private val context: Context) {
     private var resumed = 0
     val inForeground: Boolean get() = resumed > 0
 
-    val presenter = Presenter(context, ringer, { inForeground }, MirrorListener::cancel)
+    val presenter = Presenter(context, ringer, { inForeground }, { key -> MirrorListener.ownKey(settings.value.deviceId, key)?.let(MirrorListener::cancel) })
 
     private val inbox = Inbox({ settings.value }, presenter, activities, context.getSharedPreferences("inbox", Context.MODE_PRIVATE))
 

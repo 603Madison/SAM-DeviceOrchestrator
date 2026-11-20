@@ -271,7 +271,7 @@ async fn sign_in(server: &str, token_stdin: bool) -> Result<()> {
     let Some(agent) = running else {
         // No agent to pick it up: do it here; the agent reads the sign-in when it starts.
         let waiting = signin::start(&server, &system::device_name()).await?;
-        println!("Opening your browser to sign in. If it doesn't open, go to:\n  {}", waiting.url);
+        println!("{}", opening_words(&waiting.pairing_code, &waiting.url));
         if let Err(why) = system::open(&waiting.url).await {
             eprintln!("({why})");
         }
@@ -310,8 +310,11 @@ async fn sign_in(server: &str, token_stdin: bool) -> Result<()> {
         if !told {
             told = true;
             println!(
-                "Opening your browser to sign in. If it doesn't open, go to:\n  {}",
-                status["signInUrl"].as_str().unwrap_or("")
+                "{}",
+                opening_words(
+                    status["pairingCode"].as_str().unwrap_or(""),
+                    status["signInUrl"].as_str().unwrap_or("")
+                )
             );
         }
         if tokio::time::Instant::now() > until {
@@ -323,9 +326,21 @@ async fn sign_in(server: &str, token_stdin: bool) -> Result<()> {
 
 /// The sign-in a new one replaced: its device entry goes with it.
 async fn forget_earlier(http: &reqwest::Client, (before, server): (Credentials, String), now: &Credentials) {
-    if let Some(old) = before.token.as_deref().filter(|old| Some(*old) != now.token.as_deref() && !before.device_id.is_empty() && !server.is_empty()) {
-        let _ = api::Api::new(http, &server, Some(old)).delete(&format!("/api/devices/{}", before.device_id)).await;
+    if let Some(old) = before
+        .token
+        .as_deref()
+        .filter(|old| Some(*old) != now.token.as_deref() && !before.device_id.is_empty() && !server.is_empty())
+    {
+        let _ = api::Api::new(http, &server, Some(old))
+            .delete(&format!("/api/devices/{}", before.device_id))
+            .await;
     }
+}
+
+fn opening_words(code: &str, url: &str) -> String {
+    format!(
+        "Your code: {code}\nThe sign-in page shows the same one. Only carry on there if they match.\n\nOpening your browser. If it doesn't open, go to:\n  {url}"
+    )
 }
 
 fn signed_in_words(display_name: &str, username: &str, device: &str) -> String {
@@ -342,7 +357,11 @@ fn status_words(status: &Value) -> String {
     if status["signedIn"] != true {
         let mut words = String::from("Nobody's signed in on this computer.");
         if status["signingIn"] == true {
-            words.push_str(&format!("\nA sign-in is waiting in your browser:\n  {}", text("signInUrl")));
+            words.push_str(&format!(
+                "\nA sign-in is waiting in your browser, with the code {}:\n  {}",
+                text("pairingCode"),
+                text("signInUrl")
+            ));
         } else if !text("error").is_empty() {
             words.push_str(&format!("\nThe last sign-in didn't work: {}", text("error")));
         } else {

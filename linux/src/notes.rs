@@ -9,7 +9,17 @@ pub const MIRRORED_HINT: &str = "x-sam-mirrored";
 
 /// Apps whose notifications never leave this computer, whatever the settings say: password
 /// managers and one-time-code apps (matched anywhere in the app's name or desktop entry).
-pub const ALWAYS_PRIVATE: &[&str] = &["keepass", "bitwarden", "1password", "proton pass", "protonpass", "seahorse", "keyring", "authenticator", "kwallet"];
+pub const ALWAYS_PRIVATE: &[&str] = &[
+    "keepass",
+    "bitwarden",
+    "1password",
+    "proton pass",
+    "protonpass",
+    "seahorse",
+    "keyring",
+    "authenticator",
+    "kwallet",
+];
 
 const MAX_TITLE: usize = 200;
 const MAX_TEXT: usize = 2000;
@@ -368,8 +378,20 @@ mod tests {
             "excluded by its id"
         );
         assert!(outgoing(&base, &["Signal Beta".into(), "".into()]).is_some(), "only the apps named");
-        assert!(outgoing(&seen("KeePassXC", "Database unlocked", "x"), &[]).is_none(), "a password manager's, always");
-        assert!(outgoing(&Seen { desktop_entry: "com.bitwarden.desktop".into(), ..seen("", "Copied", "x") }, &[]).is_none());
+        assert!(
+            outgoing(&seen("KeePassXC", "Database unlocked", "x"), &[]).is_none(),
+            "a password manager's, always"
+        );
+        assert!(
+            outgoing(
+                &Seen {
+                    desktop_entry: "com.bitwarden.desktop".into(),
+                    ..seen("", "Copied", "x")
+                },
+                &[]
+            )
+            .is_none()
+        );
         assert!(outgoing(&seen("Signal", "", ""), &[]).is_none(), "an empty one");
         assert!(
             outgoing(&seen("Signal", "  ", "<b></b>\n"), &[]).is_none(),

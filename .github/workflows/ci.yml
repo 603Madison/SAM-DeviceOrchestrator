@@ -1,7 +1,8 @@
 name: Checks
 
 # Every push and pull request: the server's tests, the web app's type check, tests and build, and
-# the Android app's tests, lint and debug APK (kept as a build artifact for a week).
+# the Android app's tests, lint and debug APK (kept as a build artifact for a week), and the Linux
+# agent's tests.
 on:
   push:
   pull_request:
@@ -31,7 +32,7 @@ jobs:
       - name: Server tests
         env:
           SAMO_SERVER_ONLY: "1"
-        run: ./gradlew --no-daemon :server:test :server:installDist
+        run: ./gradlew --no-daemon :shared:test :server:test :server:installDist
 
   android:
     runs-on: ubuntu-latest
@@ -56,3 +57,17 @@ jobs:
           path: android/build/outputs/screenshots/
           retention-days: 7
           if-no-files-found: ignore
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: linux
+      - name: Tests and lints
+        working-directory: linux
+        run: cargo test --locked && cargo clippy --all-targets --locked -- -D warnings

@@ -317,7 +317,11 @@ impl Api {
 }
 
 fn unreachable_words(base: &str, error: &reqwest::Error) -> String {
-    let why = if error.is_timeout() {
+    // What went wrong underneath, as the libraries describe it (never the request's content).
+    let causes = format!("{error:?}").to_lowercase();
+    let why = if causes.contains("certificate") || causes.contains("unknownissuer") {
+        "its certificate isn't one this computer trusts"
+    } else if error.is_timeout() {
         "it took too long to answer"
     } else if error.is_connect() {
         "couldn't connect"
@@ -355,9 +359,17 @@ pub fn server_address(typed: &str) -> Result<String, String> {
     Ok(url.as_str().trim_end_matches('/').to_string())
 }
 
-/// Whether what's said to this server crosses the network unencrypted.
+/// Whether what's said to this server crosses the network unencrypted: plain http to anywhere
+/// but this computer itself.
 pub fn is_plain_http(server: &str) -> bool {
-    server.starts_with("http://")
+    let Ok(url) = url::Url::parse(server) else { return false };
+    let here = match url.host() {
+        Some(url::Host::Domain(name)) => name.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    };
+    url.scheme() == "http" && !here
 }
 
 /// The live line's address for a server.
@@ -549,6 +561,16 @@ mod tests {
             "https://example.com/orchestrator"
         );
         assert!(is_plain_http("http://192.168.1.5:8080") && !is_plain_http("https://o.example.com"));
+        assert!(is_plain_http("http://orchestrator.lan") && is_plain_http("http://localhost.example.com"));
+        for here in [
+            "http://127.0.0.1:8080",
+            "http://localhost:8080",
+            "http://LOCALHOST",
+            "http://[::1]:8080",
+            "http://127.0.0.5",
+        ] {
+            assert!(!is_plain_http(here), "no warning for this computer itself: {here}");
+        }
         for bad in [
             "",
             "ftp://x.example",

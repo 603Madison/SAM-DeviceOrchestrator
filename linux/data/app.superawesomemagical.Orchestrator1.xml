@@ -13,7 +13,9 @@
 <node>
   <interface name="app.superawesomemagical.Orchestrator1">
     <!-- JSON: {"signedIn", "server", "username", "displayName", "connected", "device": {"id", "name"},
-         "signingIn", "signInUrl"?, "error"?} -->
+         "signingIn", "signInUrl"?, "pairingCode"?, "error"?}
+         While a sign-in waits in the browser: where the browser was sent, and the pairing code ("249 228")
+         the page there shows too. -->
     <method name="Status">
       <arg name="status" type="s" direction="out"/>
     </method>

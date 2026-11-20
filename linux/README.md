@@ -34,7 +34,12 @@ A computer with no browser signs in with a device token on standard input
 (`sam-orchestrator sign-in --token-stdin https://…`); one way to get a token is
 `POST /api/auth/login` with `"app": true`.
 
-`http://` servers are accepted with a warning: fine on a home network you trust, nowhere else.
+Before the browser opens, `sign-in` prints a six-digit pairing code ("249 228"), and the sign-in
+page shows the same one: only carry on there if they match. (`Status()` carries it as
+`pairingCode` while the sign-in waits, for the desktop's Settings.)
+
+`http://` servers are accepted with a warning (none for this computer itself, 127.0.0.1 or
+localhost): fine on a home network you trust, nowhere else.
 
 ### Settings
 

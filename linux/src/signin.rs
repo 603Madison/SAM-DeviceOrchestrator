@@ -40,6 +40,16 @@ pub fn challenge_for(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
+/// The pairing code for a PKCE challenge (`docs/PROTOCOL.md`): six digits the agent shows and
+/// the sign-in page shows too, so the person can see the page is for the sign-in they started.
+pub fn pairing_code(challenge: &str) -> String {
+    const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let n = challenge
+        .chars()
+        .fold(0u64, |n, c| (n * 64 + ALPHABET.find(c).unwrap_or(0) as u64) % 1_000_000);
+    format!("{:03} {:03}", n / 1000, n % 1000)
+}
+
 /// A sign-in the browser has been (or is about to be) sent off on.
 pub struct Waiting {
     listener: TcpListener,
@@ -48,6 +58,8 @@ pub struct Waiting {
     pub device_name: String,
     /// Where the browser goes.
     pub url: String,
+    /// What the page there shows too.
+    pub pairing_code: String,
 }
 
 /// Starts listening and works out where to send the browser.
@@ -58,7 +70,9 @@ pub async fn start(server: &str, device_name: &str) -> Result<Waiting> {
     let port = listener.local_addr()?.port();
     let pkce = pkce();
     let url = connect_address(server, &pkce.challenge, device_name, port)?;
+    let pairing_code = pairing_code(&pkce.challenge);
     Ok(Waiting {
+        pairing_code,
         listener,
         verifier: pkce.verifier,
         server: server.to_string(),
@@ -310,6 +324,23 @@ mod tests {
     }
 
     #[test]
+    fn the_pairing_code_is_the_protocols() {
+        assert_eq!(pairing_code("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"), "249 228");
+        // Always six digits, zeros kept: "A" is index 0.
+        assert_eq!(pairing_code("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), "000 000");
+        assert_eq!(pairing_code("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH"), "000 007");
+        let code = pairing_code(&pkce().challenge);
+        assert!(
+            code.len() == 7
+                && code
+                    .chars()
+                    .enumerate()
+                    .all(|(i, c)| if i == 3 { c == ' ' } else { c.is_ascii_digit() }),
+            "{code}"
+        );
+    }
+
+    #[test]
     fn the_browser_is_sent_to_connect_app() {
         let url = connect_address("https://o.example.com", "abc", "Maddie's laptop & co", 40123).unwrap();
         assert_eq!(
@@ -361,6 +392,8 @@ mod tests {
     async fn the_listener_takes_the_code_and_ignores_the_rest() {
         let waiting = start("https://o.example.com", "Test").await.unwrap();
         let port = waiting.listener.local_addr().unwrap().port();
+        let challenge = waiting.url.split("challenge=").nth(1).unwrap().split('&').next().unwrap();
+        assert_eq!(waiting.pairing_code, pairing_code(challenge));
         assert!(
             waiting
                 .url
