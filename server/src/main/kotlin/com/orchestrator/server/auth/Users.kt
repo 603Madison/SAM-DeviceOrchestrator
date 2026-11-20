@@ -1,0 +1,175 @@
+package com.orchestrator.server.auth
+
+import com.orchestrator.server.ApiError
+import com.orchestrator.server.db.Database
+import com.orchestrator.server.tickets.TicketIdentity
+import com.orchestrator.server.db.Row
+import com.orchestrator.server.util.Passwords
+import com.orchestrator.server.util.Random
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.orchestrator.api.Role
+import com.orchestrator.api.User
+
+/** Accounts: local ones with passwords, and ones from the identity provider. */
+class UserStore(
+    private val db: Database,
+    private val passwords: Passwords,
+    private val clock: () -> Long = System::currentTimeMillis,
+) {
+    suspend fun count(): Long = db.tx { long("SELECT COUNT(*) FROM users") }
+
+    suspend fun list(): List<User> = db.tx { query("SELECT * FROM users ORDER BY username COLLATE NOCASE", map = ::toUser) }
+
+    suspend fun byId(id: String): User? = db.tx { one("SELECT * FROM users WHERE id = ?", id, map = ::toUser) }
+
+    suspend fun byUsername(username: String): User? =
+        db.tx { one("SELECT * FROM users WHERE username = ?", username.trim(), map = ::toUser) }
+
+    suspend fun byOidc(issuer: String, subject: String): User? =
+        db.tx { one("SELECT * FROM users WHERE oidc_issuer = ? AND oidc_subject = ?", issuer, subject, map = ::toUser) }
+
+    /** The account for [username] if [password] is right (and it may sign in with one). */
+    suspend fun checkPassword(username: String, password: String): User? {
+        val found = db.tx {
+            one("SELECT * FROM users WHERE username = ?", username.trim()) { toUser(it) to it.stringOrNull("password_hash") }
+        }
+        val ok = withContext(Dispatchers.Default) { passwords.verify(password, found?.second) }
+        return found?.first?.takeIf { ok }
+    }
+
+    suspend fun create(
+        username: String,
+        displayName: String = username,
+        role: Role = Role.USER,
+        password: String? = null,
+        breakGlass: Boolean = false,
+        oidcIssuer: String? = null,
+        oidcSubject: String? = null,
+        /** An admin chose the password: it's temporary, and the person chooses their own first. */
+        byAdmin: Boolean = false,
+    ): User {
+        val name = validUsername(username)
+        password?.let(::validPassword)
+        val hash = password?.let { withContext(Dispatchers.Default) { passwords.hash(it) } }
+        val id = Random.id()
+        db.tx {
+            if (one("SELECT 1 FROM users WHERE username = ?", name) { true } == true) {
+                throw ApiError.conflict("The username \"$name\" is taken")
+            }
+            val setByAdmin = byAdmin && hash != null
+            update(
+                """INSERT INTO users (id, username, display_name, password_hash, role, break_glass, oidc_issuer, oidc_subject, created_at,
+                   must_change_password, password_set_by_admin_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                id, name, displayName.trim().ifBlank { name }.take(MAX_NAME), hash, role, breakGlass, oidcIssuer, oidcSubject, clock(),
+                setByAdmin, if (setByAdmin) clock() else null,
+            )
+        }
+        return byId(id)!!
+    }
+
+    /** A username based on [wanted] that isn't taken yet ("maddie", then "maddie-2"…). */
+    suspend fun freeUsername(wanted: String): String {
+        val base = wanted.trim().replace(Regex("[^A-Za-z0-9._@-]"), "-").trim('-').take(MAX_NAME - 4).ifBlank { "user" }
+        return db.tx {
+            generateSequence(1) { it + 1 }.map { if (it == 1) base else "$base-$it" }
+                .first { candidate -> one("SELECT 1 FROM users WHERE username = ?", candidate) { true } == null }
+        }
+    }
+
+    suspend fun update(id: String, displayName: String? = null, role: Role? = null, disabled: Boolean? = null): User {
+        val user = byId(id) ?: throw ApiError.notFound("No such user")
+        if (user.breakGlass && (role == Role.USER || disabled == true)) {
+            throw ApiError.badRequest("The break-glass admin can't be demoted or disabled")
+        }
+        db.tx {
+            update(
+                "UPDATE users SET display_name = ?, role = ?, disabled = ? WHERE id = ?",
+                (displayName?.trim()?.ifBlank { null } ?: user.displayName).take(MAX_NAME),
+                role ?: user.role,
+                disabled ?: user.disabled,
+                id,
+            )
+        }
+        return byId(id)!!
+    }
+
+    /**
+     * Sets [id]'s password. [byAdmin]: an admin chose it, so it's temporary (the person must choose
+     * their own first) and when is kept; the person's own choice clears that need.
+     */
+    suspend fun setPassword(id: String, password: String, byAdmin: Boolean = false) {
+        validPassword(password)
+        val hash = withContext(Dispatchers.Default) { passwords.hash(password) }
+        val changed = db.tx {
+            if (byAdmin) update("UPDATE users SET password_hash = ?, must_change_password = 1, password_set_by_admin_at = ? WHERE id = ?", hash, clock(), id)
+            else update("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?", hash, id)
+        }
+        if (changed == 0) throw ApiError.notFound("No such user")
+    }
+
+    suspend fun delete(id: String) {
+        val user = byId(id) ?: throw ApiError.notFound("No such user")
+        if (user.breakGlass) throw ApiError.badRequest("The break-glass admin can't be deleted")
+        db.tx { update("DELETE FROM users WHERE id = ?", id) }
+    }
+
+    /** What the identity provider said about [id] at their last sign-in there. */
+    suspend fun setIdentity(id: String, email: String?, groups: Set<String>) = db.tx {
+        update("UPDATE users SET email = ?, oidc_groups = ? WHERE id = ?", email?.take(254), groups.filter { '\n' !in it }.take(200).joinToString("\n"), id)
+    }
+
+    /** Who [id] is, for a sign-in ticket. */
+    suspend fun identity(id: String): TicketIdentity? = db.tx {
+        one("SELECT * FROM users WHERE id = ? AND disabled = 0", id) { row ->
+            TicketIdentity(
+                userId = row.string("id"),
+                username = row.string("username"),
+                displayName = row.string("display_name"),
+                email = row.stringOrNull("email"),
+                oidcIssuer = row.stringOrNull("oidc_issuer"),
+                oidcSubject = row.stringOrNull("oidc_subject"),
+                groups = row.string("oidc_groups").split('\n').filter { it.isNotEmpty() },
+            )
+        }
+    }
+
+    suspend fun touchLogin(id: String) = db.tx { update("UPDATE users SET last_login_at = ? WHERE id = ?", clock(), id) }
+
+    suspend fun breakGlass(): User? = db.tx { one("SELECT * FROM users WHERE break_glass = 1", map = ::toUser) }
+
+    companion object {
+        const val MAX_NAME = 64
+        const val MIN_PASSWORD = 8
+        private val USERNAME = Regex("[A-Za-z0-9._@-]{1,$MAX_NAME}")
+
+        fun validUsername(username: String): String {
+            val name = username.trim()
+            if (!USERNAME.matches(name)) {
+                throw ApiError.badRequest("Usernames are 1 to $MAX_NAME letters, digits and . _ @ -")
+            }
+            return name
+        }
+
+        fun validPassword(password: String) {
+            if (password.length < MIN_PASSWORD) throw ApiError.badRequest("Passwords need at least $MIN_PASSWORD characters")
+            if (password.length > 1024) throw ApiError.badRequest("That password is too long")
+        }
+
+        fun toUser(row: Row) = User(
+            id = row.string("id"),
+            username = row.string("username"),
+            displayName = row.string("display_name"),
+            role = Role.valueOf(row.string("role")),
+            breakGlass = row.bool("break_glass"),
+            disabled = row.bool("disabled"),
+            oidc = row.stringOrNull("oidc_subject") != null,
+            hasPassword = row.stringOrNull("password_hash") != null,
+            createdAt = row.long("created_at"),
+            lastLoginAt = row.longOrNull("last_login_at"),
+            mustChangePassword = row.bool("must_change_password"),
+            passwordSetByAdminAt = row.longOrNull("password_set_by_admin_at"),
+        )
+    }
+}
