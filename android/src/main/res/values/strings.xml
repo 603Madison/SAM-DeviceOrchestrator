@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Orchestrator</string>
+    <string name="app_full_name">SuperAwesomeMagicalOrchestrator</string>
+    <string name="share_label">Send to device</string>
+    <string name="approve_label">Sign in with SuperAwesomeMagicalOrchestrator</string>
+    <string name="tile_clipboard">Send clipboard</string>
+    <string name="listener_label">Share notifications with your devices</string>
+    <string name="line_use">Keeps one connection open to your own SuperAwesomeMagicalOrchestrator server, so notifications, links, the clipboard and rings from your other devices arrive straight away. It has to stay open for as long as you are signed in; you can turn it off in the app (You, Stay connected).</string>
+</resources>

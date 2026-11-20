@@ -94,16 +94,8 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
 
     implementation(libs.datastore.preferences)
-    // Playing: DASH (YouTube, through the server), HLS (PeerTube) and plain files, over OkHttp.
-    implementation(libs.media3.exoplayer)
-    implementation(libs.media3.exoplayer.dash)
-    implementation(libs.media3.exoplayer.hls)
-    implementation(libs.media3.datasource.okhttp)
-    implementation(libs.media3.ui)
-    implementation(libs.media3.session)
-    // Thumbnails and avatars, through the server.
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp)
+    // The periodic fallback, for when the always-on line is off or was stopped.
+    implementation(libs.work.runtime.ktx)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)

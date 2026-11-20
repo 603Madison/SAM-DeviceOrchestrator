@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Showing what the other devices send, and the line's own quiet notification. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The always-on line to the server (see line/LineService.kt for why it's "special use"). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Ringing this phone from another device. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Asking, once and only if the person wants it, to be left out of battery optimisation: a
+         device-to-device line is one of the uses Android allows this for, and without it Android
+         pauses the line while the phone sleeps. The app works without it (the 15-minute check). -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        tools:ignore="BatteryLife" />
+    <!-- Nothing may be drawn over "Let this app sign in as you?". -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+
+    <queries>
+        <!-- Apps with an icon in the launcher: for their names on mirrored notifications and the
+             list of which apps to mirror. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- The family's apps: whether each is installed, and whether one opens a link. -->
+        <package android:name="app.superawesomemagical.video" />
+        <package android:name="app.superawesomemagical.health" />
+        <package android:name="app.superawesomemagical.maps" />
+        <package android:name="app.superawesomemagical.email" />
+        <package android:name="com.music.connect" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <!-- Home servers are often plain HTTP on the home network. -->
+    <application
+        android:name=".OrchestratorApp"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Orchestrator"
+        android:usesCleartextTraffic="true"
+        tools:targetApi="s">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- The server's sign-in page hands the app its one-time code here. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="samorchestrator" android:host="signed-in" />
+            </intent-filter>
+        </activity>
+
+        <!-- "Send to device" in other apps' share sheets. -->
+        <activity
+            android:name=".ui.share.ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/share_label"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Orchestrator.Sheet">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- The Quick Settings tile lands here: Android only lets a focused activity read the clipboard. -->
+        <activity
+            android:name=".ui.share.SendClipboardActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Orchestrator.Sheet" />
+
+        <!-- One of the family's apps asks whether it may sign in as the person. It must be started
+             for a result (so Android says which app is asking); anything else is refused. -->
+        <activity
+            android:name=".link.ApproveActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/approve_label"
+            android:theme="@style/Theme.Orchestrator.Sheet">
+            <intent-filter>
+                <action android:name="app.superawesomemagical.orchestrator.APPROVE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- How the family's apps reach the orchestrator (docs/PROTOCOL.md). Open to any app on
+             purpose: who is calling is checked on every call (LinkGate), and an app the person
+             hasn't approved learns only whether someone is signed in. -->
+        <provider
+            android:name=".link.LinkProvider"
+            android:authorities="app.superawesomemagical.orchestrator.link"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
+        <service
+            android:name=".line.LineService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="@string/line_use" />
+        </service>
+
+        <service
+            android:name=".notify.MirrorListener"
+            android:exported="true"
+            android:label="@string/listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".ui.share.ClipboardTile"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_sparkle"
+            android:label="@string/tile_clipboard"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <receiver android:name=".line.BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Buttons on the app's own notifications (Copy, Found it, a swipe away). -->
+        <receiver android:name=".notify.ActionReceiver" android:exported="false" />
+    </application>
+</manifest>
