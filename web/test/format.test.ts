@@ -1,3 +1,4 @@
+import { pairingCode } from "../src/lib/pairing.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ago, percent, webAddress } from "../src/lib/format.ts";
@@ -51,4 +52,11 @@ test("tabs and back arrows", () => {
   assert.equal(backFor("/you"), null);
   assert.deepEqual(backFor("/admin"), { to: "/you", label: "You" });
   assert.deepEqual(backFor("/nowhere"), { to: "/", label: "Devices" });
+});
+
+test("pairing codes are six digits from the challenge, the same as the devices work out", () => {
+  const code = pairingCode("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+  assert.match(code, /^\d{3} \d{3}$/);
+  assert.equal(code, "249 228");
+  assert.notEqual(code, pairingCode("F9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cN"));
 });

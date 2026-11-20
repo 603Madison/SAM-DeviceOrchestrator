@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import androidx.core.graphics.createBitmap
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.orchestrator.api.Payload
@@ -68,7 +69,7 @@ class MirrorListener : NotificationListenerService() {
     /** Whether the person keeps this notification's channel off the lock screen altogether. */
     private fun channelSecret(key: String, rankingMap: RankingMap?): Boolean {
         val ranking = Ranking()
-        return rankingMap?.getRanking(key, ranking) == true && ranking.lockscreenVisibilityOverride == Notification.VISIBILITY_SECRET
+        return rankingMap?.getRanking(key, ranking) == true && ranking.channel?.lockscreenVisibility == Notification.VISIBILITY_SECRET
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap?, reason: Int) {
@@ -118,7 +119,7 @@ class AppNames(private val context: Context) {
         attempt {
             val drawable = context.packageManager.getApplicationIcon(packageName)
             listOf(64, 48).firstNotNullOfOrNull { size ->
-                val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val bitmap = createBitmap(size, size)
                 drawable.setBounds(0, 0, size, size)
                 drawable.draw(Canvas(bitmap))
                 val out = ByteArrayOutputStream()

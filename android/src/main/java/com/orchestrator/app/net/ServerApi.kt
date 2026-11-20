@@ -81,6 +81,11 @@ class ServerApi(
     /** Removes a device, which signs it out (this one too). */
     suspend fun remove(id: String) = send("DELETE", "${base()}/api/devices/${enc(id)}", null, Unit.serializer())
 
+    /** Removes this device with the sign-in it had ([token]), once the app has already forgotten it. */
+    suspend fun removeSelf(server: String, token: String, id: String) = attempt {
+        send("DELETE", "$server/api/devices/${enc(id)}", null, Unit.serializer(), bearer = token)
+    }
+
     suspend fun status(battery: Battery?) =
         send("POST", "${base()}/api/devices/me/status", ApiJson.encodeToString(DeviceStatus.serializer(), DeviceStatus(battery)), Unit.serializer())
 

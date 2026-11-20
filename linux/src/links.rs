@@ -60,15 +60,24 @@ mod tests {
 
     #[test]
     fn web_links_are_opened() {
-        assert_eq!(check("https://example.com/a?b=c#d"), Ok(Checked::Web("https://example.com/a?b=c#d".into())));
-        assert_eq!(check("http://192.168.1.2:8080/"), Ok(Checked::Web("http://192.168.1.2:8080/".into())));
+        assert_eq!(
+            check("https://example.com/a?b=c#d"),
+            Ok(Checked::Web("https://example.com/a?b=c#d".into()))
+        );
+        assert_eq!(
+            check("http://192.168.1.2:8080/"),
+            Ok(Checked::Web("http://192.168.1.2:8080/".into()))
+        );
         // Written out again from what was parsed, scheme first.
         assert_eq!(check("HTTPS://Example.COM").unwrap().address(), "https://example.com/");
     }
 
     #[test]
     fn the_familys_links_are_opened() {
-        assert_eq!(check("sammusic://track/12"), Ok(Checked::Family("sammusic", "sammusic://track/12".into())));
+        assert_eq!(
+            check("sammusic://track/12"),
+            Ok(Checked::Family("sammusic", "sammusic://track/12".into()))
+        );
         for scheme in FAMILY_SCHEMES {
             assert!(matches!(check(&format!("{scheme}://x/1")), Ok(Checked::Family(s, _)) if s == *scheme));
         }
@@ -112,7 +121,6 @@ mod tests {
             "example.com",
             "//example.com",
             "https://",
-            "https:///path",
             "http://user:pw@example.com/",
             "https://bank.example@evil.example/",
             "about:blank",
@@ -137,11 +145,28 @@ mod tests {
     }
 
     #[test]
+    fn what_is_opened_is_what_was_parsed() {
+        // The browser would read these the same way; what's handed over is the tidy form.
+        assert_eq!(check("https:///path").unwrap().address(), "https://path/");
+        assert_eq!(check("https:\\\\example.com\\a").unwrap().address(), "https://example.com/a");
+    }
+
+    #[test]
     fn what_is_opened_can_never_be_read_as_an_option() {
-        for ok in ["https://example.com/--help", "https://-x.example/", "http://example.com/?-=-", "samvideo://-/--", "https://example.com/;$(reboot)`x`"] {
+        for ok in [
+            "https://example.com/--help",
+            "https://-x.example/",
+            "http://example.com/?-=-",
+            "samvideo://-/--",
+            "https://example.com/;$(reboot)`x`",
+        ] {
             let address = check(ok).unwrap().address().to_string();
             assert!(!address.starts_with('-'), "{address}");
-            assert!(address.starts_with("http://") || address.starts_with("https://") || FAMILY_SCHEMES.iter().any(|s| address.starts_with(&format!("{s}:"))));
+            assert!(
+                address.starts_with("http://")
+                    || address.starts_with("https://")
+                    || FAMILY_SCHEMES.iter().any(|s| address.starts_with(&format!("{s}:")))
+            );
             assert!(!address.chars().any(|c| c.is_control() || c.is_whitespace()));
         }
     }

@@ -55,12 +55,12 @@ class Container(private val context: Context) {
         .addInterceptor(ServerApi.authInterceptor({ settings.value.server }, { settings.value.token }))
         .build()
 
-    val api = ServerApi(http, { settings.value.server }, { settings.value.token }, onSignedOut = { scope.launch { forget() } })
+    val api = ServerApi(http, { settings.value.server }, { settings.value.token }, onSignedOut = { scope.launch { signedOutByServer() } })
 
     /** For answering other apps (the provider): the whole call, start to finish, within ten seconds. */
     private val quickApi = ServerApi(
         http.newBuilder().callTimeout(10, TimeUnit.SECONDS).build(),
-        { settings.value.server }, { settings.value.token }, onSignedOut = { scope.launch { forget() } },
+        { settings.value.server }, { settings.value.token }, onSignedOut = { scope.launch { signedOutByServer() } },
     )
 
     val signIn = SignIn(context, api, prefs)
@@ -113,7 +113,8 @@ class Container(private val context: Context) {
         scope.launch {
             settings.map { it.signedIn to it.alwaysOn }.distinctUntilChanged().collect { (signedIn, _) ->
                 if (signedIn) FetchWorker.schedule(context) else FetchWorker.cancel(context)
-                LineService.sync(context)
+                // With the settings in hand: this runs while the container is still being built.
+                LineService.sync(context, settings.value)
             }
         }
         // What this phone can do changed ("Show others' notifications here"): tell the server.
@@ -145,10 +146,18 @@ class Container(private val context: Context) {
     /** Signing out removes this phone from the person's devices, which ends its sign-in on the server. */
     fun signOut() {
         scope.launch {
-            val id = settings.value.deviceId
-            if (id.isNotEmpty()) attempt { api.remove(id) }
+            val was = settings.value
+            // Forgotten here first, so the line closing behind it isn't taken for the server's doing.
             forget()
+            if (was.deviceId.isNotEmpty() && was.token != null) api.removeSelf(was.server, was.token, was.deviceId)
         }
+    }
+
+    /** The server says this phone's sign-in is no longer good (it was removed from another device, or by an admin). */
+    private suspend fun signedOutByServer() {
+        if (!settings.value.signedIn) return
+        forget()
+        signIn.say("This phone was signed out. Sign in again to connect it.")
     }
 
     /** Forgets the sign-in and everything that came with it; the apps' approvals were for that person. */

@@ -54,13 +54,26 @@ pub fn outgoing(seen: &Seen, never: &[String]) -> Option<Outgoing> {
     if excluded(&app_name) || excluded(&app_id) {
         return None;
     }
-    let app = if !app_name.is_empty() { app_name } else { app_id.rsplit('.').next().unwrap_or("").to_string() };
-    Some(Outgoing { app: clip(&app, MAX_APP), app_id: clip(&app_id, MAX_APP), title, text })
+    let app = if !app_name.is_empty() {
+        app_name
+    } else {
+        app_id.rsplit('.').next().unwrap_or("").to_string()
+    };
+    Some(Outgoing {
+        app: clip(&app, MAX_APP),
+        app_id: clip(&app_id, MAX_APP),
+        title,
+        text,
+    })
 }
 
 /// One line of plain words: control characters out, space at the ends off.
 fn plain(text: &str) -> String {
-    text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>().trim().to_string()
+    text.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 fn clip(text: &str, most: usize) -> String {
@@ -81,7 +94,7 @@ pub fn strip_markup(body: &str) -> String {
     while let Some(at) = rest.find(['<', '&']) {
         out.push_str(&rest[..at]);
         let tail = &rest[at..];
-        if tail.starts_with('<') {
+        if let Some(after) = tail.strip_prefix('<') {
             match tag_length(tail) {
                 Some((length, name)) => {
                     if name == "br" || name == "p" || name == "div" {
@@ -91,7 +104,7 @@ pub fn strip_markup(body: &str) -> String {
                 }
                 None => {
                     out.push('<');
-                    rest = &tail[1..];
+                    rest = after;
                 }
             }
         } else {
@@ -138,7 +151,11 @@ fn tag_length(text: &str) -> Option<(usize, String)> {
     if text[1..end].contains('<') {
         return None;
     }
-    let name: String = inner.chars().take_while(|c| c.is_ascii_alphanumeric()).collect::<String>().to_lowercase();
+    let name: String = inner
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_lowercase();
     Some((end + 1, name))
 }
 
@@ -206,14 +223,24 @@ impl<T> Coalesce<T> {
             Some(entry) if now.duration_since(entry.sent_at) < Self::EVERY => {
                 let first = entry.waiting.is_none();
                 entry.waiting = Some(value);
-                if first { Offer::Wait(Self::EVERY - now.duration_since(entry.sent_at)) } else { Offer::Replaced }
+                if first {
+                    Offer::Wait(Self::EVERY - now.duration_since(entry.sent_at))
+                } else {
+                    Offer::Replaced
+                }
             }
             _ => {
                 if self.entries.len() >= Self::MOST {
                     let cutoff = now.checked_sub(Self::EVERY * 30).unwrap_or(now);
                     self.entries.retain(|_, e| e.waiting.is_some() || e.sent_at > cutoff);
                 }
-                self.entries.insert(key.to_string(), Entry { sent_at: now, waiting: None });
+                self.entries.insert(
+                    key.to_string(),
+                    Entry {
+                        sent_at: now,
+                        waiting: None,
+                    },
+                );
                 Offer::Send(value)
             }
         }
@@ -242,15 +269,42 @@ mod tests {
     use super::*;
 
     fn seen(app: &str, summary: &str, body: &str) -> Seen {
-        Seen { app_name: app.into(), summary: summary.into(), body: body.into(), ..Default::default() }
+        Seen {
+            app_name: app.into(),
+            summary: summary.into(),
+            body: body.into(),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn an_ordinary_notification_is_mirrored() {
-        let out = outgoing(&Seen { desktop_entry: "org.signal.Signal".into(), ..seen("Signal", "Sam", "On my <b>way</b>") }, &[]).unwrap();
-        assert_eq!(out, Outgoing { app: "Signal".into(), app_id: "org.signal.Signal".into(), title: "Sam".into(), text: "On my way".into() });
+        let out = outgoing(
+            &Seen {
+                desktop_entry: "org.signal.Signal".into(),
+                ..seen("Signal", "Sam", "On my <b>way</b>")
+            },
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            Outgoing {
+                app: "Signal".into(),
+                app_id: "org.signal.Signal".into(),
+                title: "Sam".into(),
+                text: "On my way".into()
+            }
+        );
         // No app name: the last part of the desktop entry stands in.
-        let out = outgoing(&Seen { desktop_entry: "org.gnome.Calendar".into(), ..seen("", "Dentist", "") }, &[]).unwrap();
+        let out = outgoing(
+            &Seen {
+                desktop_entry: "org.gnome.Calendar".into(),
+                ..seen("", "Dentist", "")
+            },
+            &[],
+        )
+        .unwrap();
         assert_eq!(out.app, "Calendar");
     }
 
@@ -259,15 +313,61 @@ mod tests {
         let base = seen("Signal", "Sam", "hi");
         assert!(outgoing(&base, &[]).is_some());
         assert!(outgoing(&Seen { own: true, ..base.clone() }, &[]).is_none(), "the agent's own");
-        assert!(outgoing(&Seen { mirrored: true, ..base.clone() }, &[]).is_none(), "one that was mirrored here");
-        assert!(outgoing(&Seen { transient: true, ..base.clone() }, &[]).is_none(), "a transient one");
-        assert!(outgoing(&Seen { desktop_entry: OWN_DESKTOP_ENTRY.into(), ..base.clone() }, &[]).is_none(), "ours by name");
-        assert!(outgoing(&base, &["signal".into()]).is_none(), "an excluded app, whatever the capitals");
+        assert!(
+            outgoing(
+                &Seen {
+                    mirrored: true,
+                    ..base.clone()
+                },
+                &[]
+            )
+            .is_none(),
+            "one that was mirrored here"
+        );
+        assert!(
+            outgoing(
+                &Seen {
+                    transient: true,
+                    ..base.clone()
+                },
+                &[]
+            )
+            .is_none(),
+            "a transient one"
+        );
+        assert!(
+            outgoing(
+                &Seen {
+                    desktop_entry: OWN_DESKTOP_ENTRY.into(),
+                    ..base.clone()
+                },
+                &[]
+            )
+            .is_none(),
+            "ours by name"
+        );
+        assert!(
+            outgoing(&base, &["signal".into()]).is_none(),
+            "an excluded app, whatever the capitals"
+        );
         assert!(outgoing(&base, &[" Signal ".into()]).is_none());
-        assert!(outgoing(&Seen { desktop_entry: "org.signal.Signal".into(), ..seen("Messages", "Sam", "hi") }, &["org.signal.signal".into()]).is_none(), "excluded by its id");
+        assert!(
+            outgoing(
+                &Seen {
+                    desktop_entry: "org.signal.Signal".into(),
+                    ..seen("Messages", "Sam", "hi")
+                },
+                &["org.signal.signal".into()]
+            )
+            .is_none(),
+            "excluded by its id"
+        );
         assert!(outgoing(&base, &["Signal Beta".into(), "".into()]).is_some(), "only the apps named");
         assert!(outgoing(&seen("Signal", "", ""), &[]).is_none(), "an empty one");
-        assert!(outgoing(&seen("Signal", "  ", "<b></b>\n"), &[]).is_none(), "one that's empty once the markup is out");
+        assert!(
+            outgoing(&seen("Signal", "  ", "<b></b>\n"), &[]).is_none(),
+            "one that's empty once the markup is out"
+        );
         assert!(outgoing(&seen("Signal", "", "just a body"), &[]).is_some());
     }
 
@@ -281,10 +381,19 @@ mod tests {
 
     #[test]
     fn markup_is_stripped() {
-        assert_eq!(strip_markup("<b>Bold</b> and <i>italic</i> and <u>under</u>"), "Bold and italic and under");
-        assert_eq!(strip_markup(r#"See <a href="https://example.com/?a=1&amp;b=2">this page</a>"#), "See this page");
+        assert_eq!(
+            strip_markup("<b>Bold</b> and <i>italic</i> and <u>under</u>"),
+            "Bold and italic and under"
+        );
+        assert_eq!(
+            strip_markup(r#"See <a href="https://example.com/?a=1&amp;b=2">this page</a>"#),
+            "See this page"
+        );
         assert_eq!(strip_markup(r#"Photo <img src="file:///x.png" alt="cat"/> here"#), "Photo  here");
-        assert_eq!(strip_markup("Tom &amp; Jerry &lt;3 &quot;cheese&quot; &apos;now&apos; &#33; &#x2728;"), "Tom & Jerry <3 \"cheese\" 'now' ! ✨");
+        assert_eq!(
+            strip_markup("Tom &amp; Jerry &lt;3 &quot;cheese&quot; &apos;now&apos; &#33; &#x2728;"),
+            "Tom & Jerry <3 \"cheese\" 'now' ! ✨"
+        );
         assert_eq!(strip_markup("1 < 2 and 3 > 2"), "1 < 2 and 3 > 2");
         assert_eq!(strip_markup("a <b and c>"), "a");
         assert_eq!(strip_markup("x < y <b>z</b>"), "x < y z");

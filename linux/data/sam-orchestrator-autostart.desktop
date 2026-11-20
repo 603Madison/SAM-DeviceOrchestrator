@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=SuperAwesomeMagicalOrchestrator
+Comment=Keeps this computer in touch with your other devices, when you're signed in
+# Does nothing unless someone's signed in; then it wakes the agent through the session bus,
+# so it runs as its systemd service.
+Exec=sam-orchestrator autostart
+Icon=superawesomemagical
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-Phase=Applications
+X-KDE-autostart-phase=1

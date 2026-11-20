@@ -16,7 +16,7 @@ data class Battery(val level: Int, val charging: Boolean = false)
 data class Device(
     val id: String,
     val name: String,
-    val kind: DeviceKind,
+    val kind: DeviceKind = DeviceKind.OTHER,
     /** "Pixel 9", "ThinkPad X1": whatever the device calls itself. */
     val model: String = "",
     /** The device's public key (P-256, uncompressed point, base64): what's sent to it is sealed for this. */

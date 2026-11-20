@@ -116,9 +116,9 @@ class LineService : Service() {
          * background Android may refuse to start it (unless battery optimisation is off for the
          * app): that's not an error, the periodic look carries on until the app is next opened.
          */
-        fun sync(context: Context) {
+        fun sync(context: Context, settings: com.orchestrator.app.data.Settings = context.container.settings.value) {
             val intent = Intent(context, LineService::class.java)
-            if (wanted(context.container.settings.value)) attempt { context.startForegroundService(intent) }
+            if (wanted(settings)) attempt { context.startForegroundService(intent) }
             else context.stopService(intent)
         }
 

@@ -41,7 +41,14 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { server: String::new(), notifications_out: true, notifications_in: true, clipboard: true, links: true, never_mirror: Vec::new() }
+        Self {
+            server: String::new(),
+            notifications_out: true,
+            notifications_in: true,
+            clipboard: true,
+            links: true,
+            never_mirror: Vec::new(),
+        }
     }
 }
 
@@ -120,7 +127,10 @@ impl Credentials {
 
     /// Signed out: the token and who it was go, the device's key stays.
     pub fn forget(&mut self) {
-        *self = Credentials { private_key: self.private_key.take(), ..Default::default() };
+        *self = Credentials {
+            private_key: self.private_key.take(),
+            ..Default::default()
+        };
     }
 }
 
@@ -134,13 +144,19 @@ fn base(variable: &str, fallback: &str) -> Result<PathBuf> {
     if let Some(dir) = std::env::var_os(variable).map(PathBuf::from).filter(|p| p.is_absolute()) {
         return Ok(dir);
     }
-    let home = std::env::var_os("HOME").map(PathBuf::from).filter(|p| p.is_absolute()).ok_or_else(|| anyhow!("No home folder (HOME isn't set)"))?;
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .ok_or_else(|| anyhow!("No home folder (HOME isn't set)"))?;
     Ok(home.join(fallback))
 }
 
 impl Store {
     pub fn from_environment() -> Result<Self> {
-        Ok(Self::at(&base("XDG_CONFIG_HOME", ".config")?, &base("XDG_STATE_HOME", ".local/state")?))
+        Ok(Self::at(
+            &base("XDG_CONFIG_HOME", ".config")?,
+            &base("XDG_STATE_HOME", ".local/state")?,
+        ))
     }
 
     pub fn at(config_home: &Path, state_home: &Path) -> Self {
@@ -148,10 +164,6 @@ impl Store {
             config_file: config_home.join("superawesomemagical").join("orchestrator.json"),
             credentials_file: state_home.join("superawesomemagical").join("orchestrator").join("credentials.json"),
         }
-    }
-
-    pub fn credentials_file(&self) -> &Path {
-        &self.credentials_file
     }
 
     pub fn config(&self) -> Config {
@@ -172,8 +184,13 @@ impl Store {
     /// a moment when the file is half-written or readable by anyone else.
     pub fn save_credentials(&self, credentials: &Credentials) -> Result<()> {
         let dir = self.credentials_file.parent().expect("the file is in a folder");
-        fs::DirBuilder::new().recursive(true).mode(0o700).create(dir).with_context(|| format!("Couldn't make {}", dir.display()))?;
-        fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).with_context(|| format!("Couldn't close {} to others", dir.display()))?;
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)
+            .with_context(|| format!("Couldn't make {}", dir.display()))?;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+            .with_context(|| format!("Couldn't close {} to others", dir.display()))?;
         write_atomically(&self.credentials_file, &serde_json::to_vec_pretty(credentials)?, 0o600)
     }
 }
@@ -221,20 +238,31 @@ mod tests {
         let dir = scratch("config");
         let store = Store::at(&dir.join("config"), &dir.join("state"));
         assert_eq!(store.config(), Config::default(), "nothing saved yet");
-        let mut changed = Config { server: "https://o.example.com".into(), ..Default::default() };
+        let mut changed = Config {
+            server: "https://o.example.com".into(),
+            ..Default::default()
+        };
         changed.set("clipboard", "false").unwrap();
         changed.set("neverMirror", "Signal, , signal,Spotify").unwrap();
         store.save_config(&changed).unwrap();
         assert_eq!(store.config(), changed);
         let text = fs::read_to_string(dir.join("config/superawesomemagical/orchestrator.json")).unwrap();
-        assert!(text.contains("\"notificationsOut\": true") && text.contains("\"neverMirror\""), "{text}");
+        assert!(
+            text.contains("\"notificationsOut\": true") && text.contains("\"neverMirror\""),
+            "{text}"
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
     fn settings_are_changed_by_name() {
         let mut config = Config::default();
-        for (key, value) in [("notificationsOut", "off"), ("notificationsIn", "FALSE"), ("clipboard", "no"), ("links", "0")] {
+        for (key, value) in [
+            ("notificationsOut", "off"),
+            ("notificationsIn", "FALSE"),
+            ("clipboard", "no"),
+            ("links", "0"),
+        ] {
             config.set(key, value).unwrap();
         }
         assert!(!config.notifications_out && !config.notifications_in && !config.clipboard && !config.links);
@@ -245,7 +273,10 @@ mod tests {
         config.set("neverMirror", "").unwrap();
         assert!(config.never_mirror.is_empty());
         assert!(config.set("links", "maybe").is_err());
-        assert!(config.set("server", "https://elsewhere.example").is_err(), "the server changes by signing in, not here");
+        assert!(
+            config.set("server", "https://elsewhere.example").is_err(),
+            "the server changes by signing in, not here"
+        );
         assert!(config.set("neverMirror", "[1, 2]").is_err());
         assert_eq!(config.settings()["links"], true);
     }
@@ -255,21 +286,38 @@ mod tests {
         let dir = scratch("credentials");
         let store = Store::at(&dir.join("config"), &dir.join("state"));
         assert!(!store.credentials().signed_in());
-        let credentials = Credentials { token: Some("t0ken".into()), private_key: Some("k3y".into()), device_id: "d1".into(), ..Default::default() };
+        let credentials = Credentials {
+            token: Some("t0ken".into()),
+            private_key: Some("k3y".into()),
+            device_id: "d1".into(),
+            ..Default::default()
+        };
         store.save_credentials(&credentials).unwrap();
         let folder = dir.join("state/superawesomemagical/orchestrator");
         assert_eq!(fs::metadata(&folder).unwrap().permissions().mode() & 0o777, 0o700);
-        assert_eq!(fs::metadata(folder.join("credentials.json")).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(folder.join("credentials.json")).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         assert_eq!(store.credentials(), credentials);
         // Written again over a file and folder someone opened up: closed again, nothing left behind.
         fs::set_permissions(&folder, fs::Permissions::from_mode(0o755)).unwrap();
         fs::set_permissions(folder.join("credentials.json"), fs::Permissions::from_mode(0o644)).unwrap();
         let mut signed_out = credentials.clone();
         signed_out.forget();
-        assert_eq!(signed_out, Credentials { private_key: Some("k3y".into()), ..Default::default() });
+        assert_eq!(
+            signed_out,
+            Credentials {
+                private_key: Some("k3y".into()),
+                ..Default::default()
+            }
+        );
         store.save_credentials(&signed_out).unwrap();
         assert_eq!(fs::metadata(&folder).unwrap().permissions().mode() & 0o777, 0o700);
-        assert_eq!(fs::metadata(folder.join("credentials.json")).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(folder.join("credentials.json")).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         assert!(!store.credentials().signed_in());
         let left: Vec<_> = fs::read_dir(&folder).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(left, ["credentials.json"]);

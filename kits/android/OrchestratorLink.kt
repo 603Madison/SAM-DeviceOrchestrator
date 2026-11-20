@@ -37,7 +37,10 @@ object OrchestratorLink {
         data class Unavailable(val reason: String) : SignIn
     }
 
-    /** Who is signed in to the orchestrator on this phone. */
+    /**
+     * Who is signed in to the orchestrator on this phone. Until the person has let this app sign in
+     * through it, only [signedIn] is told: the rest is empty.
+     */
     data class Status(val signedIn: Boolean, val server: String, val username: String, val displayName: String)
 
     fun installed(context: Context): Boolean = try {

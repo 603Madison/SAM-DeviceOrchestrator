@@ -45,6 +45,11 @@ class SignIn(private val context: Context, private val api: ServerApi, private v
     /** Why the last browser sign-in couldn't be finished, if it couldn't. */
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /** Something the sign-in page should say (the server signed this phone out). */
+    fun say(message: String) {
+        _error.value = message
+    }
+
     /**
      * Finishes a browser sign-in from [link] in [scope] (the app's, so turning the phone or leaving
      * the screen can't cut the code exchange short); [finishing] and [error] say how it went.

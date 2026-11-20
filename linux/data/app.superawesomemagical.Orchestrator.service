@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=app.superawesomemagical.Orchestrator
+Exec=/usr/bin/sam-orchestrator daemon
+SystemdService=sam-orchestrator.service

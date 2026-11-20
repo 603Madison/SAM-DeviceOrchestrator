@@ -37,3 +37,49 @@ zbus = { version = "5", default-features = false, features = ["tokio"] }
 lto = "thin"
 codegen-units = 4
 strip = true
+
+# `cargo deb`: the package for Ubuntu (24.04 and later), Debian 13, Mint 22, Pop!_OS 24.04.
+[package.metadata.deb]
+name = "sam-orchestrator"
+maintainer = "SuperAwesomeMagicalOrchestrator <superawesomemagicalorchestrator@users.noreply.github.com>"
+copyright = "SuperAwesomeMagicalOrchestrator contributors"
+section = "utils"
+priority = "optional"
+extended-description = "SuperAwesomeMagicalOrchestrator on the Linux desktop: sign in once and every app of the family on this computer is signed in, and your devices share notifications, the clipboard, links and what you're doing. A user service on the session bus, and the sam-orchestrator command."
+depends = "$auto, dbus-user-session | dbus-x11, xdg-utils"
+recommends = "wl-clipboard, pipewire-bin | pulseaudio-utils, sound-theme-freedesktop"
+assets = [
+    ["target/release/sam-orchestrator", "usr/bin/", "755"],
+    ["data/systemd/sam-orchestrator.service", "usr/lib/systemd/user/", "644"],
+    ["data/app.superawesomemagical.Orchestrator.service", "usr/share/dbus-1/services/", "644"],
+    ["data/app.superawesomemagical.Orchestrator1.xml", "usr/share/dbus-1/interfaces/", "644"],
+    ["data/app.superawesomemagical.Orchestrator.desktop", "usr/share/applications/", "644"],
+    ["data/sam-orchestrator-autostart.desktop", "etc/xdg/autostart/sam-orchestrator.desktop", "644"],
+]
+
+# `cargo generate-rpm`: the package for Fedora (40 and later), and SuperAwesomeMagicalLinux.
+[package.metadata.generate-rpm]
+name = "sam-orchestrator"
+summary = "One sign-in for the SuperAwesomeMagical apps, and your devices together"
+# Built on Ubuntu, so not from what the binary links there (Ubuntu's library versions, which
+# Fedora doesn't have). It links only glibc: TLS is rustls, so no OpenSSL of either version.
+auto-req = "no"
+assets = [
+    { source = "target/release/sam-orchestrator", dest = "/usr/bin/sam-orchestrator", mode = "755" },
+    { source = "data/systemd/sam-orchestrator.service", dest = "/usr/lib/systemd/user/sam-orchestrator.service", mode = "644" },
+    { source = "data/app.superawesomemagical.Orchestrator.service", dest = "/usr/share/dbus-1/services/app.superawesomemagical.Orchestrator.service", mode = "644" },
+    { source = "data/app.superawesomemagical.Orchestrator1.xml", dest = "/usr/share/dbus-1/interfaces/app.superawesomemagical.Orchestrator1.xml", mode = "644" },
+    { source = "data/app.superawesomemagical.Orchestrator.desktop", dest = "/usr/share/applications/app.superawesomemagical.Orchestrator.desktop", mode = "644" },
+    { source = "data/sam-orchestrator-autostart.desktop", dest = "/etc/xdg/autostart/sam-orchestrator.desktop", mode = "644", config = "noreplace" },
+]
+
+[package.metadata.generate-rpm.requires]
+glibc = "*"
+dbus = "*"
+xdg-utils = "*"
+ca-certificates = "*"
+
+[package.metadata.generate-rpm.recommends]
+wl-clipboard = "*"
+pipewire-utils = "*"
+sound-theme-freedesktop = "*"

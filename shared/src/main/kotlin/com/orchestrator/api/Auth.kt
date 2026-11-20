@@ -8,6 +8,8 @@ val ApiJson = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
     encodeDefaults = true
+    // A value this version doesn't know (a new kind of device, say) becomes the default, not an error.
+    coerceInputValues = true
 }
 
 @Serializable

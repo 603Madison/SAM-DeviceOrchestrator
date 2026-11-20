@@ -1,0 +1,71 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  SuperAwesomeMagicalOrchestrator's agent on the session bus.
+
+  Name       app.superawesomemagical.Orchestrator   (D-Bus activated)
+  Path       /app/superawesomemagical/Orchestrator
+  Errors     app.superawesomemagical.Orchestrator.Error.NotSignedIn, .UnknownApp, .Failed
+
+  docs/PROTOCOL.md says what each part means. A test (the_published_interface_is_the_one_served)
+  keeps this file the same as what the daemon serves.
+-->
+<node>
+  <interface name="app.superawesomemagical.Orchestrator1">
+    <!-- JSON: {"signedIn", "server", "username", "displayName", "connected", "device": {"id", "name"},
+         "signingIn", "signInUrl"?, "error"?} -->
+    <method name="Status">
+      <arg name="status" type="s" direction="out"/>
+    </method>
+    <!-- A sign-in ticket for one of the family's apps ("music"), and that app's server. -->
+    <method name="SignInTo">
+      <arg name="app" type="s" direction="in"/>
+      <arg name="url" type="s" direction="out"/>
+      <arg name="ticket" type="s" direction="out"/>
+    </method>
+    <!-- JSON, as GET /api/apps: [{"id", "name", "url"}] -->
+    <method name="Apps">
+      <arg name="apps" type="s" direction="out"/>
+    </method>
+    <!-- JSON, as GET /api/devices -->
+    <method name="Devices">
+      <arg name="devices" type="s" direction="out"/>
+    </method>
+    <!-- Seals the payload JSON ({"type": "link", …}) for a device id; "" for every other device. -->
+    <method name="Send">
+      <arg name="device" type="s" direction="in"/>
+      <arg name="payload" type="s" direction="in"/>
+    </method>
+    <!-- What the person is doing in an app here. Empty title: they stopped. -->
+    <method name="PublishActivity">
+      <arg name="app" type="s" direction="in"/>
+      <arg name="title" type="s" direction="in"/>
+      <arg name="detail" type="s" direction="in"/>
+      <arg name="url" type="s" direction="in"/>
+    </method>
+    <!-- JSON: [{"device", "deviceName", "app", "title", "detail", "url", "at"}], newest first. -->
+    <method name="Activities">
+      <arg name="activities" type="s" direction="out"/>
+    </method>
+    <!-- Opens the browser to sign in. Returns at once: Changed says when it's done, Status how it went. -->
+    <method name="SignIn">
+      <arg name="server" type="s" direction="in"/>
+    </method>
+    <method name="SignOut"/>
+    <!-- JSON: {"notificationsOut", "notificationsIn", "clipboard", "links", "neverMirror": ["App"]} -->
+    <method name="Settings">
+      <arg name="settings" type="s" direction="out"/>
+    </method>
+    <!-- One of Settings' keys; "true" or "false", or for neverMirror a JSON list (or names with commas). -->
+    <method name="SetSetting">
+      <arg name="key" type="s" direction="in"/>
+      <arg name="value" type="s" direction="in"/>
+    </method>
+    <!-- Reads the settings and the sign-in from disk again. -->
+    <method name="Reload"/>
+    <!-- The status, the devices or the settings changed. -->
+    <signal name="Changed"/>
+    <!-- What Activities gives changed. -->
+    <signal name="ActivitiesChanged"/>
+  </interface>
+</node>

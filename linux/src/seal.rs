@@ -35,7 +35,9 @@ pub struct DeviceKey {
 
 impl DeviceKey {
     pub fn generate() -> Self {
-        Self { secret: SecretKey::random(&mut OsRng) }
+        Self {
+            secret: SecretKey::random(&mut OsRng),
+        }
     }
 
     /// From the stored form: the 32-byte number, base64.
@@ -95,9 +97,19 @@ pub fn seal_with(plain: &[u8], recipient: &str, device_id: &str, ephemeral: &Sec
     let key = derive(ephemeral, &recipient_key, &epk, &point(&recipient_key));
     let ct = Aes256Gcm::new_from_slice(&key)
         .expect("a 32-byte key")
-        .encrypt(&Nonce::from(nonce), AeadPayload { msg: plain, aad: device_id.as_bytes() })
+        .encrypt(
+            &Nonce::from(nonce),
+            AeadPayload {
+                msg: plain,
+                aad: device_id.as_bytes(),
+            },
+        )
         .map_err(|_| anyhow!("Couldn't seal that"))?;
-    Ok(Sealed { epk: B64.encode(epk), nonce: B64.encode(nonce), ct: B64.encode(ct) })
+    Ok(Sealed {
+        epk: B64.encode(epk),
+        nonce: B64.encode(nonce),
+        ct: B64.encode(ct),
+    })
 }
 
 /// Opens what was sealed for this device. Fails if it wasn't, or was changed.
@@ -111,7 +123,13 @@ pub fn open(sealed: &Sealed, key: &DeviceKey, device_id: &str) -> Result<Vec<u8>
     let aes = derive(&key.secret, &epk, &point(&epk), &point(&key.secret.public_key()));
     Aes256Gcm::new_from_slice(&aes)
         .expect("a 32-byte key")
-        .decrypt(&Nonce::from(nonce), AeadPayload { msg: &ct, aad: device_id.as_bytes() })
+        .decrypt(
+            &Nonce::from(nonce),
+            AeadPayload {
+                msg: &ct,
+                aad: device_id.as_bytes(),
+            },
+        )
         .map_err(|_| anyhow!("That wasn't sealed for this device"))
 }
 

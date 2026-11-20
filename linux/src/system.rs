@@ -16,20 +16,33 @@ pub const MAX_CLIPBOARD: usize = 40_000;
 
 /// Where `/sys` is (somewhere else in tests).
 fn sys() -> PathBuf {
-    std::env::var_os("SAM_ORCHESTRATOR_SYSFS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/sys"))
+    std::env::var_os("SAM_ORCHESTRATOR_SYSFS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/sys"))
 }
 
 /// What to call this computer: its pretty name if it has one, or its host name tidied up.
 pub fn device_name() -> String {
-    let pretty = std::fs::read_to_string("/etc/machine-info").ok().and_then(|text| pretty_hostname(&text));
-    let host = std::fs::read_to_string("/proc/sys/kernel/hostname").or_else(|_| std::fs::read_to_string("/etc/hostname")).unwrap_or_default();
+    let pretty = std::fs::read_to_string("/etc/machine-info")
+        .ok()
+        .and_then(|text| pretty_hostname(&text));
+    let host = std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .or_else(|_| std::fs::read_to_string("/etc/hostname"))
+        .unwrap_or_default();
     pretty.unwrap_or_else(|| prettify(&host))
 }
 
 /// `PRETTY_HOSTNAME` from `/etc/machine-info`.
 pub fn pretty_hostname(machine_info: &str) -> Option<String> {
-    let value = machine_info.lines().find_map(|line| line.trim().strip_prefix("PRETTY_HOSTNAME="))?.trim();
-    let value = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')).or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\''))).unwrap_or(value);
+    let value = machine_info
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("PRETTY_HOSTNAME="))?
+        .trim();
+    let value = value
+        .strip_prefix('"')
+        .and_then(|v| v.strip_suffix('"'))
+        .or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')))
+        .unwrap_or(value);
     let value: String = value.replace("\\\"", "\"").chars().filter(|c| !c.is_control()).take(64).collect();
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_string())
@@ -53,13 +66,32 @@ pub fn model() -> String {
     let read = |name: &str| std::fs::read_to_string(dmi.join(name)).unwrap_or_default().trim().to_string();
     let placeholder = |text: &str| {
         let lower = text.to_lowercase();
-        text.is_empty() || ["to be filled", "system product name", "default string", "not specified", "none", "unknown", "o.e.m"].iter().any(|p| lower.contains(p))
+        text.is_empty()
+            || [
+                "to be filled",
+                "system product name",
+                "default string",
+                "not specified",
+                "none",
+                "unknown",
+                "o.e.m",
+            ]
+            .iter()
+            .any(|p| lower.contains(p))
     };
     // Lenovo keeps the name people know in product_version ("ThinkPad X1 Carbon Gen 9").
     let name = read("product_name");
     let version = read("product_version");
-    let model = if read("sys_vendor").to_lowercase().contains("lenovo") && !placeholder(&version) { version } else { name };
-    if placeholder(&model) { String::new() } else { model.chars().filter(|c| !c.is_control()).take(64).collect() }
+    let model = if read("sys_vendor").to_lowercase().contains("lenovo") && !placeholder(&version) {
+        version
+    } else {
+        name
+    };
+    if placeholder(&model) {
+        String::new()
+    } else {
+        model.chars().filter(|c| !c.is_control()).take(64).collect()
+    }
 }
 
 /// The battery, if there is one: the average of the batteries' levels, charging when one is or
@@ -79,17 +111,20 @@ pub fn battery_at(power_supply: &Path) -> Option<Battery> {
         let name = entry.file_name().to_string_lossy().to_string();
         if kind == "Mains" || kind.starts_with("USB") {
             plugged |= read(&dir, "online").as_deref() == Some("1");
-        } else if name.starts_with("BAT") || (kind == "Battery" && read(&dir, "scope").as_deref() != Some("Device")) {
-            if let Some(level) = read(&dir, "capacity").and_then(|c| c.parse::<i32>().ok()) {
-                levels.push(level.clamp(0, 100));
-                charging |= read(&dir, "status").as_deref() == Some("Charging");
-            }
+        } else if (name.starts_with("BAT") || (kind == "Battery" && read(&dir, "scope").as_deref() != Some("Device")))
+            && let Some(level) = read(&dir, "capacity").and_then(|c| c.parse::<i32>().ok())
+        {
+            levels.push(level.clamp(0, 100));
+            charging |= read(&dir, "status").as_deref() == Some("Charging");
         }
     }
     if levels.is_empty() {
         return None;
     }
-    Some(Battery { level: levels.iter().sum::<i32>() / levels.len() as i32, charging: charging || plugged })
+    Some(Battery {
+        level: levels.iter().sum::<i32>() / levels.len() as i32,
+        charging: charging || plugged,
+    })
 }
 
 // ---- Tools ----
@@ -123,7 +158,11 @@ fn desktop_environment() -> Vec<(&'static str, String)> {
         .filter(|n| n.starts_with("wayland-") && !n.ends_with(".lock"))
         .collect();
     sockets.sort();
-    sockets.into_iter().next().map(|socket| vec![("WAYLAND_DISPLAY", socket)]).unwrap_or_default()
+    sockets
+        .into_iter()
+        .next()
+        .map(|socket| vec![("WAYLAND_DISPLAY", socket)])
+        .unwrap_or_default()
 }
 
 /// Puts `text` on the clipboard (`wl-copy`, the text on its standard input).
@@ -133,9 +172,18 @@ pub async fn set_clipboard(text: &str) -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { missing("wl-copy", "the wl-clipboard package") } else { format!("Couldn't run wl-copy: {e}") })?;
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                missing("wl-copy", "the wl-clipboard package")
+            } else {
+                format!("Couldn't run wl-copy: {e}")
+            }
+        })?;
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(text.as_bytes()).await.map_err(|_| "wl-copy stopped before taking the text".to_string())?;
+        stdin
+            .write_all(text.as_bytes())
+            .await
+            .map_err(|_| "wl-copy stopped before taking the text".to_string())?;
         stdin.shutdown().await.ok();
     }
     // wl-copy leaves a copy of itself behind to hold the clipboard; the one we started ends at once.
@@ -152,7 +200,12 @@ pub async fn set_clipboard(text: &str) -> Result<(), String> {
 
 /// What's on the clipboard (`wl-paste --no-newline`).
 pub async fn clipboard() -> Result<String, String> {
-    let run = desktop_command("wl-paste").arg("--no-newline").stdin(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true).output();
+    let run = desktop_command("wl-paste")
+        .arg("--no-newline")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .output();
     let output = match tokio::time::timeout(Duration::from_secs(10), run).await {
         Err(_) => return Err("wl-paste took too long".into()),
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => return Err(missing("wl-paste", "the wl-clipboard package")),
@@ -186,16 +239,22 @@ pub async fn open(address: &str) -> Result<(), String> {
         let mut command = Command::new("systemd-run");
         command.args(["--user", "--quiet", "--collect", "--no-block"]);
         for name in ["WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE"] {
-            let found = std::env::var(name).ok().or_else(|| desktop_environment().into_iter().find(|(n, _)| *n == name).map(|(_, v)| v));
+            let found = std::env::var(name)
+                .ok()
+                .or_else(|| desktop_environment().into_iter().find(|(n, _)| *n == name).map(|(_, v)| v));
             if let Some(value) = found {
                 command.arg(format!("--setenv={name}={value}"));
             }
         }
-        command.args(["--", "xdg-open", address]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-        if let Ok(Ok(status)) = tokio::time::timeout(Duration::from_secs(10), command.status()).await {
-            if status.success() {
-                return Ok(());
-            }
+        command
+            .args(["--", "xdg-open", address])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if let Ok(Ok(status)) = tokio::time::timeout(Duration::from_secs(10), command.status()).await
+            && status.success()
+        {
+            return Ok(());
         }
     }
     let mut child = desktop_command("xdg-open")
@@ -204,7 +263,13 @@ pub async fn open(address: &str) -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { missing("xdg-open", "the xdg-utils package") } else { format!("Couldn't run xdg-open: {e}") })?;
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                missing("xdg-open", "the xdg-utils package")
+            } else {
+                format!("Couldn't run xdg-open: {e}")
+            }
+        })?;
     // xdg-open may stay for as long as what it opened; give it a moment to fail, then let it be.
     match tokio::time::timeout(Duration::from_secs(3), child.wait()).await {
         Ok(Ok(status)) if !status.success() => Err("Nothing here could open that".into()),
@@ -222,7 +287,12 @@ pub async fn open(address: &str) -> Result<(), String> {
 /// Whether an installed app handles links of this scheme (`xdg-mime`). When that can't be
 /// asked, yes: `xdg-open` then says for itself.
 pub async fn handles_scheme(scheme: &str) -> bool {
-    let run = Command::new("xdg-mime").args(["query", "default", &format!("x-scheme-handler/{scheme}")]).stdin(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true).output();
+    let run = Command::new("xdg-mime")
+        .args(["query", "default", &format!("x-scheme-handler/{scheme}")])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .output();
     match tokio::time::timeout(Duration::from_secs(5), run).await {
         Ok(Ok(output)) if output.status.success() => !String::from_utf8_lossy(&output.stdout).trim().is_empty(),
         _ => true,
@@ -243,7 +313,9 @@ fn on_path(tool: &str) -> bool {
 /// Plays the ringing sound over and over, until this is dropped (or for `how_long`). Whether
 /// there was anything to play it with.
 pub async fn ring(how_long: Duration) -> bool {
-    let sound = std::env::var("SAM_ORCHESTRATOR_RING_SOUND").ok().or_else(|| SOUNDS.iter().find(|s| Path::new(s).is_file()).map(|s| s.to_string()));
+    let sound = std::env::var("SAM_ORCHESTRATOR_RING_SOUND")
+        .ok()
+        .or_else(|| SOUNDS.iter().find(|s| Path::new(s).is_file()).map(|s| s.to_string()));
     let player = ["pw-play", "paplay", "canberra-gtk-play"].into_iter().find(|p| on_path(p));
     let (Some(player), true) = (player, sound.is_some() || on_path("canberra-gtk-play")) else {
         tokio::time::sleep(how_long).await;
@@ -260,10 +332,19 @@ pub async fn ring(how_long: Duration) -> bool {
         };
         let started = tokio::time::Instant::now();
         // Dropped with this future (the ring was answered): the player stops mid-sound.
-        let played = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true).status();
+        let played = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .status();
         let _ = tokio::time::timeout_at(until, played).await;
         // A player that fails at once (no sound server) mustn't spin.
-        let pause = if started.elapsed() < Duration::from_millis(200) { 1500 } else { 400 };
+        let pause = if started.elapsed() < Duration::from_millis(200) {
+            1500
+        } else {
+            400
+        };
         tokio::time::sleep(Duration::from_millis(pause)).await;
     }
     true
@@ -286,9 +367,15 @@ mod tests {
 
     #[test]
     fn the_pretty_name_is_preferred() {
-        assert_eq!(pretty_hostname("PRETTY_HOSTNAME=\"Maddie's Laptop\"\nCHASSIS=laptop\n").as_deref(), Some("Maddie's Laptop"));
+        assert_eq!(
+            pretty_hostname("PRETTY_HOSTNAME=\"Maddie's Laptop\"\nCHASSIS=laptop\n").as_deref(),
+            Some("Maddie's Laptop")
+        );
         assert_eq!(pretty_hostname("CHASSIS=laptop\nPRETTY_HOSTNAME=Den\n").as_deref(), Some("Den"));
-        assert_eq!(pretty_hostname("PRETTY_HOSTNAME='The \"big\" one'").as_deref(), Some("The \"big\" one"));
+        assert_eq!(
+            pretty_hostname("PRETTY_HOSTNAME='The \"big\" one'").as_deref(),
+            Some("The \"big\" one")
+        );
         assert_eq!(pretty_hostname("PRETTY_HOSTNAME=\"\"\n"), None);
         assert_eq!(pretty_hostname("CHASSIS=laptop\n"), None);
     }
@@ -308,7 +395,13 @@ mod tests {
         put("BAT0", "type", "Battery\n");
         put("BAT0", "capacity", "81\n");
         put("BAT0", "status", "Discharging\n");
-        assert_eq!(battery_at(&dir), Some(Battery { level: 81, charging: false }));
+        assert_eq!(
+            battery_at(&dir),
+            Some(Battery {
+                level: 81,
+                charging: false
+            })
+        );
         put("BAT0", "status", "Charging\n");
         assert_eq!(battery_at(&dir), Some(Battery { level: 81, charging: true }));
         // Full and plugged in reads "Full" or "Not charging": still on the charger.
@@ -322,7 +415,13 @@ mod tests {
         put("hidpp_battery_0", "scope", "Device\n");
         put("hidpp_battery_0", "capacity", "5\n");
         put("AC", "online", "0\n");
-        assert_eq!(battery_at(&dir), Some(Battery { level: 60, charging: false }));
+        assert_eq!(
+            battery_at(&dir),
+            Some(Battery {
+                level: 60,
+                charging: false
+            })
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 }

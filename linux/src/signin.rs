@@ -52,16 +52,27 @@ pub struct Waiting {
 
 /// Starts listening and works out where to send the browser.
 pub async fn start(server: &str, device_name: &str) -> Result<Waiting> {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).await.context("Couldn't listen for the browser coming back")?;
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .context("Couldn't listen for the browser coming back")?;
     let port = listener.local_addr()?.port();
     let pkce = pkce();
     let url = connect_address(server, &pkce.challenge, device_name, port)?;
-    Ok(Waiting { listener, verifier: pkce.verifier, server: server.to_string(), device_name: device_name.to_string(), url })
+    Ok(Waiting {
+        listener,
+        verifier: pkce.verifier,
+        server: server.to_string(),
+        device_name: device_name.to_string(),
+        url,
+    })
 }
 
 pub fn connect_address(server: &str, challenge: &str, device_name: &str, port: u16) -> Result<String> {
     let mut url = url::Url::parse(&format!("{server}/connect-app")).map_err(|_| anyhow!("That isn't a server address"))?;
-    url.query_pairs_mut().append_pair("challenge", challenge).append_pair("name", device_name).append_pair("redirect", &format!("http://127.0.0.1:{port}/signed-in"));
+    url.query_pairs_mut()
+        .append_pair("challenge", challenge)
+        .append_pair("name", device_name)
+        .append_pair("redirect", &format!("http://127.0.0.1:{port}/signed-in"));
     Ok(url.into())
 }
 
@@ -84,7 +95,10 @@ impl Waiting {
 
     async fn swap(&self, http: &reqwest::Client, store: &Store, code: &str) -> Result<Credentials> {
         let signed_in: SignedIn = Api::new(http, &self.server, None)
-            .post("/api/auth/app/token", &json!({"code": code, "verifier": self.verifier, "deviceName": self.device_name}))
+            .post(
+                "/api/auth/app/token",
+                &json!({"code": code, "verifier": self.verifier, "deviceName": self.device_name}),
+            )
             .await?;
         let token = signed_in.token.ok_or_else(|| anyhow!("The server gave no token"))?;
         establish(http, store, &self.server, &token).await
@@ -104,7 +118,12 @@ impl Waiting {
                     bail!("{why}");
                 }
                 Came::SomethingElse => {
-                    let _ = respond(&mut stream, "404 Not Found", &page("Nothing here", "This address only finishes a sign-in.", false)).await;
+                    let _ = respond(
+                        &mut stream,
+                        "404 Not Found",
+                        &page("Nothing here", "This address only finishes a sign-in.", false),
+                    )
+                    .await;
                 }
             }
         }
@@ -126,7 +145,12 @@ fn read_target(target: &str) -> Came {
     if url.path() != "/signed-in" {
         return Came::SomethingElse;
     }
-    let find = |name: &str| url.query_pairs().find(|(k, _)| k == name).map(|(_, v)| v.to_string()).filter(|v| !v.is_empty());
+    let find = |name: &str| {
+        url.query_pairs()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.to_string())
+            .filter(|v| !v.is_empty())
+    };
     if let Some(code) = find("code").filter(|c| c.len() <= 512) {
         return Came::Code(code);
     }
@@ -167,7 +191,10 @@ async fn respond(stream: &mut TcpStream, status: &str, html: &str) -> std::io::R
 }
 
 fn escape(text: &str) -> String {
-    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// The page the browser's tab ends on: the family's look, and nothing fetched from anywhere.
@@ -248,7 +275,17 @@ pub async fn establish(http: &reqwest::Client, store: &Store, server: &str, toke
 /// Tells the server what this device is and gives it the key things for it are sealed with.
 pub async fn register(api: &Api, name: &str, key: &DeviceKey) -> Result<Device, ApiError> {
     let model = system::model();
-    api.post("/api/devices", &DeviceRegistration { name, kind: "LINUX", model: &model, public_key: &key.public_text(), capabilities: api::CAPABILITIES }).await
+    api.post(
+        "/api/devices",
+        &DeviceRegistration {
+            name,
+            kind: "LINUX",
+            model: &model,
+            public_key: &key.public_text(),
+            capabilities: api::CAPABILITIES,
+        },
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -258,19 +295,32 @@ mod tests {
     #[test]
     fn pkce_is_s256() {
         // RFC 7636, appendix B.
-        assert_eq!(challenge_for("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"), "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+        assert_eq!(
+            challenge_for("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
         let made = pkce();
         assert_eq!(made.verifier.len(), 43);
         assert_eq!(made.challenge.len(), 43);
-        assert!(made.challenge.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "what the server's check allows");
+        assert!(
+            made.challenge.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+            "what the server's check allows"
+        );
         assert_ne!(pkce().verifier, made.verifier);
     }
 
     #[test]
     fn the_browser_is_sent_to_connect_app() {
         let url = connect_address("https://o.example.com", "abc", "Maddie's laptop & co", 40123).unwrap();
-        assert_eq!(url, "https://o.example.com/connect-app?challenge=abc&name=Maddie%27s+laptop+%26+co&redirect=http%3A%2F%2F127.0.0.1%3A40123%2Fsigned-in");
-        assert!(connect_address("http://192.168.1.5:8080/samo", "abc", "x", 1).unwrap().starts_with("http://192.168.1.5:8080/samo/connect-app?"));
+        assert_eq!(
+            url,
+            "https://o.example.com/connect-app?challenge=abc&name=Maddie%27s+laptop+%26+co&redirect=http%3A%2F%2F127.0.0.1%3A40123%2Fsigned-in"
+        );
+        assert!(
+            connect_address("http://192.168.1.5:8080/samo", "abc", "x", 1)
+                .unwrap()
+                .starts_with("http://192.168.1.5:8080/samo/connect-app?")
+        );
     }
 
     #[test]
@@ -278,7 +328,15 @@ mod tests {
         assert_eq!(read_target("/signed-in?code=abc123"), Came::Code("abc123".into()));
         assert_eq!(read_target("/signed-in?x=1&code=a%2Bb"), Came::Code("a+b".into()));
         assert_eq!(read_target("/signed-in?error=You+said+no"), Came::Refused("You said no".into()));
-        for other in ["/", "/favicon.ico", "/signed-in", "/signed-in?code=", "/signed-in/x?code=abc", "/other?code=abc", "/signed-inx?code=abc"] {
+        for other in [
+            "/",
+            "/favicon.ico",
+            "/signed-in",
+            "/signed-in?code=",
+            "/signed-in/x?code=abc",
+            "/other?code=abc",
+            "/signed-inx?code=abc",
+        ] {
             assert_eq!(read_target(other), Came::SomethingElse, "{other}");
         }
         assert_eq!(read_target(&format!("/signed-in?code={}", "a".repeat(600))), Came::SomethingElse);
@@ -290,7 +348,9 @@ mod tests {
         assert!(html.contains("You're signed in") && html.contains("You can close this tab."));
         assert!(html.contains("#0B1220") && html.contains("Lexend"));
         // Nothing fetched from anywhere: no links out, scripts, or addresses at all.
-        for outside in ["http://", "https://", "//", "<script", "<link", "@import", "url(\"", "url(h", "src="] {
+        for outside in [
+            "http://", "https://", "//", "<script", "<link", "@import", "url(\"", "url(h", "src=",
+        ] {
             assert!(!html.replace("<!doctype html>", "").contains(outside), "{outside}");
         }
         let hostile = page("That didn't work", "<script>alert(1)</script> & \"more\"", false);
@@ -301,7 +361,11 @@ mod tests {
     async fn the_listener_takes_the_code_and_ignores_the_rest() {
         let waiting = start("https://o.example.com", "Test").await.unwrap();
         let port = waiting.listener.local_addr().unwrap().port();
-        assert!(waiting.url.contains(&format!("redirect=http%3A%2F%2F127.0.0.1%3A{port}%2Fsigned-in")));
+        assert!(
+            waiting
+                .url
+                .contains(&format!("redirect=http%3A%2F%2F127.0.0.1%3A{port}%2Fsigned-in"))
+        );
         let browser = tokio::spawn(async move {
             let ask = |request: String| async move {
                 let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
@@ -310,16 +374,28 @@ mod tests {
             };
             // A favicon request and a POST first: neither ends the wait.
             let mut answer = String::new();
-            ask("GET /favicon.ico HTTP/1.1\r\nHost: x\r\n\r\n".into()).await.read_to_string(&mut answer).await.unwrap();
+            ask("GET /favicon.ico HTTP/1.1\r\nHost: x\r\n\r\n".into())
+                .await
+                .read_to_string(&mut answer)
+                .await
+                .unwrap();
             assert!(answer.starts_with("HTTP/1.1 404"), "{answer}");
             let mut refused = String::new();
-            let _ = ask("POST /signed-in?code=nope HTTP/1.1\r\nHost: x\r\n\r\n".into()).await.read_to_string(&mut refused).await;
+            let _ = ask("POST /signed-in?code=nope HTTP/1.1\r\nHost: x\r\n\r\n".into())
+                .await
+                .read_to_string(&mut refused)
+                .await;
             assert!(refused.is_empty(), "a POST gets no answer");
             ask("GET /signed-in?code=one-time HTTP/1.1\r\nHost: x\r\n\r\n".into()).await
         });
-        let (code, mut tab) = tokio::time::timeout(Duration::from_secs(10), waiting.code()).await.unwrap().unwrap();
+        let (code, mut tab) = tokio::time::timeout(Duration::from_secs(10), waiting.code())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(code, "one-time");
-        respond(&mut tab, "200 OK", &page("You're signed in", "You can close this tab.", true)).await.unwrap();
+        respond(&mut tab, "200 OK", &page("You're signed in", "You can close this tab.", true))
+            .await
+            .unwrap();
         let mut answer = String::new();
         browser.await.unwrap().read_to_string(&mut answer).await.unwrap();
         assert!(answer.starts_with("HTTP/1.1 200 OK\r\n") && answer.contains("default-src 'none'") && answer.contains("You're signed in"));

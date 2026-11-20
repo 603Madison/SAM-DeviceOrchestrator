@@ -1,0 +1,30 @@
+# SuperAwesomeMagicalOrchestrator's agent: this computer's sign-in for the family's apps, and
+# the line to the person's other devices. The session bus starts it when something asks for
+# app.superawesomemagical.Orchestrator (and `sam-orchestrator autostart` asks at login, when
+# someone's signed in).
+[Unit]
+Description=SuperAwesomeMagicalOrchestrator: one sign-in, and your devices together
+Documentation=https://github.com/603Madison/SAM-DeviceOrchestrator
+# Not for the sign-in screen's own account.
+ConditionUser=!@system
+
+[Service]
+Type=dbus
+BusName=app.superawesomemagical.Orchestrator
+ExecStart=/usr/bin/sam-orchestrator daemon
+Restart=on-failure
+RestartSec=5
+
+# It needs the network, the session bus, and to run the desktop's tools (wl-copy, a sound
+# player; links are opened through `systemd-run --user`, so the browser is the session's and
+# not this service's). It writes two folders and nothing else.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ConfigurationDirectory=superawesomemagical
+StateDirectory=superawesomemagical/orchestrator
+StateDirectoryMode=0700
+ReadWritePaths=%E/superawesomemagical
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

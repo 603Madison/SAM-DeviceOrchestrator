@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+# What notifications from the agent are from (other devices' notifications, links, ringing):
+# the desktop looks this entry up by the notifications' desktop-entry hint.
+Name=SuperAwesomeMagical
+Comment=Notifications from your other devices
+Exec=sam-orchestrator status
+Icon=superawesomemagical
+NoDisplay=true
+Terminal=true

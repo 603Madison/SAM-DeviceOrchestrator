@@ -1,3 +1,4 @@
+import { pairingCode } from "../lib/pairing";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { MonitorSmartphone } from "lucide-react";
@@ -64,6 +65,8 @@ export function ConnectApp() {
               <strong>{user?.displayName}</strong> ({user?.username}). It will be able to sign your apps in on this device, and share
               notifications, the clipboard and links with your other devices.
             </p>
+            <div className="pairing-code" aria-label={`Pairing code ${pairingCode(challenge)}`}>{pairingCode(challenge)}</div>
+            <p className="login-sub">Your device shows this code too. Only carry on if they match.</p>
             {error && <div className="notice notice-error" role="alert">{error}</div>}
             <Button variant="primary" className="wide" busy={busy} onClick={approve}>Sign in on this device</Button>
             <Button variant="ghost" className="wide" onClick={() => window.close()}>Cancel</Button>

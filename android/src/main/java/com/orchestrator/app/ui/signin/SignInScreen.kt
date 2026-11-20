@@ -40,10 +40,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.orchestrator.api.AuthConfig
 import com.orchestrator.app.R
 import com.orchestrator.app.net.ServerAddress
@@ -142,8 +144,9 @@ fun SignInScreen(
                     Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize())
                 }
                 Text(
-                    config?.second?.serverName ?: "SuperAwesomeMagicalOrchestrator",
-                    style = MaterialTheme.typography.headlineSmall,
+                    config?.second?.serverName ?: stringResource(R.string.app_full_name),
+                    // The family's names are one long word: small enough to stay on one line on a phone.
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
                     textAlign = TextAlign.Center,
                 )
                 Text(

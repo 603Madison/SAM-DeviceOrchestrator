@@ -187,7 +187,7 @@ fun Gap(height: Dp) = Spacer(Modifier.height(height))
 
 /** A row in a card: an icon, a title with a line under it, and what's at the end (a switch, an arrow, a button). */
 @Composable
-fun InfoRow(icon: ImageVector?, title: String, subtitle: String? = null, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
+fun InfoRow(icon: ImageVector?, title: String, subtitle: String?, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
     Row(modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         icon?.let {
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(40.dp)) {
@@ -204,7 +204,7 @@ fun InfoRow(icon: ImageVector?, title: String, subtitle: String? = null, modifie
 
 /** A small rounded label: "Online", "Signed in". [strong] draws it in the theme's accent. */
 @Composable
-fun Chip(text: String, strong: Boolean = false, modifier: Modifier = Modifier) {
+fun Chip(text: String, modifier: Modifier = Modifier, strong: Boolean = false) {
     Surface(
         color = if (strong) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
         contentColor = if (strong) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,

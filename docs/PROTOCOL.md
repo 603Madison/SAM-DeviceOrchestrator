@@ -24,6 +24,10 @@ What needs the server and what doesn't:
 
 Like the family's apps: the agent opens a browser at
 `<server>/connect-app?challenge=<PKCE S256 challenge>&name=<device name>&redirect=<where>`.
+Before opening it, the agent shows a **pairing code**, and the page shows the same one, so the
+person can see the page is for the sign-in they started: six digits from the challenge
+(`n = 0`; for each character, `n = (n * 64 + its index in A–Z a–z 0–9 - _) mod 1000000`; shown
+as `123 456`; the challenge `E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM` gives `249 228`).
 The person signs in (Authentik or a password) and agrees; the page sends the browser to
 `<redirect>?code=<one-time code>`. `redirect` may only be `samorchestrator://signed-in` (Android)
 or `http://127.0.0.1:<port>/…` / `http://localhost:<port>/…` (the Linux agent listens there for a
@@ -68,7 +72,9 @@ A WebSocket at `/api/stream` with the same `Authorization` header. JSON text fra
 - either way `{"type":"ping"}`.
 
 The server closes the line when the device is removed. Reconnect with a growing pause (1 s to
-5 min); a 401 means signed out: forget the token and say so.
+5 min). A line refused for not being signed in is closed with code 1008 straight after opening
+(a WebSocket can't answer 401): ask `GET /api/devices/me`, and a 401 there means signed out:
+forget the token and say so.
 
 ### Sending
 
@@ -81,7 +87,7 @@ One sealed copy for each receiving device. `collapseKey`: a newer one replaces a
 older one from the same sender (use `"clipboard"`, `"ring"`, `"activity:<app>"`; notifications:
 none).
 `ttlSeconds`: notifications 86400, dismissals 86400, clipboard 600, links 604800, ring 300,
-activity 900.
+activity 900, media 60.
 
 ## Sealing
 

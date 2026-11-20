@@ -56,7 +56,6 @@ pub struct DeviceRegistration<'a> {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
-    pub id: String,
     pub username: String,
     #[serde(default)]
     pub display_name: String,
@@ -64,7 +63,6 @@ pub struct User {
 
 #[derive(Debug, Deserialize)]
 pub struct SignedIn {
-    pub user: User,
     pub token: Option<String>,
 }
 
@@ -96,8 +94,6 @@ pub struct IncomingMessage {
     pub from: Option<String>,
     #[serde(default)]
     pub from_name: String,
-    #[serde(default)]
-    pub sent_at: i64,
     pub sealed: Sealed,
 }
 
@@ -105,8 +101,12 @@ pub struct IncomingMessage {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum StreamFrame {
-    Message { message: IncomingMessage },
-    Devices { devices: Vec<Device> },
+    Message {
+        message: IncomingMessage,
+    },
+    Devices {
+        devices: Vec<Device>,
+    },
     Ping,
     #[serde(other)]
     Unknown,
@@ -183,7 +183,9 @@ pub fn parse_payload(bytes: &[u8]) -> Result<Option<Payload>, String> {
         return Ok(None);
     }
     let kind = kind.to_string();
-    serde_json::from_value(value).map(Some).map_err(|_| format!("a {kind} with missing or wrong fields"))
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(|_| format!("a {kind} with missing or wrong fields"))
 }
 
 /// How a payload of this kind is sent: the capability a device needs to be sent it unasked, how
@@ -208,7 +210,11 @@ pub fn delivery(payload: &Value) -> Delivery {
         "media" => (Some("media"), 60, None),
         _ => (None, 86_400, None),
     };
-    Delivery { capability, ttl_seconds, collapse_key }
+    Delivery {
+        capability,
+        ttl_seconds,
+        collapse_key,
+    }
 }
 
 // ---- HTTP ----
@@ -254,7 +260,15 @@ pub struct Api {
 
 impl Api {
     pub fn new(http: &reqwest::Client, base: &str, token: Option<&str>) -> Self {
-        Self { http: http.clone(), base: base.trim_end_matches('/').to_string(), token: token.map(str::to_string) }
+        Self {
+            http: http.clone(),
+            base: base.trim_end_matches('/').to_string(),
+            token: token.map(str::to_string),
+        }
+    }
+
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
     }
 
     pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, ApiError> {
@@ -273,11 +287,18 @@ impl Api {
         if let Some(token) = &self.token {
             request = request.bearer_auth(token);
         }
-        let response = request.send().await.map_err(|e| ApiError::Network(unreachable_words(&self.base, &e)))?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(unreachable_words(&self.base, &e)))?;
         let status = response.status();
-        let bytes = response.bytes().await.map_err(|e| ApiError::Network(unreachable_words(&self.base, &e)))?;
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| ApiError::Network(unreachable_words(&self.base, &e)))?;
         if status.is_success() {
-            return serde_json::from_slice(&bytes).map_err(|_| ApiError::Status(status.as_u16(), "The server answered with something unexpected".into()));
+            return serde_json::from_slice(&bytes)
+                .map_err(|_| ApiError::Status(status.as_u16(), "The server answered with something unexpected".into()));
         }
         let words = serde_json::from_slice::<Value>(&bytes)
             .ok()
@@ -287,7 +308,11 @@ impl Api {
                 301..=308 => "The server sent us somewhere else: check its address (https?)".to_string(),
                 code => format!("The server said no ({code})"),
             });
-        Err(if status.as_u16() == 401 { ApiError::Unauthorized(words) } else { ApiError::Status(status.as_u16(), words) })
+        Err(if status.as_u16() == 401 {
+            ApiError::Unauthorized(words)
+        } else {
+            ApiError::Status(status.as_u16(), words)
+        })
     }
 }
 
@@ -312,7 +337,11 @@ pub fn server_address(typed: &str) -> Result<String, String> {
     if typed.chars().any(|c| c.is_control() || c.is_whitespace()) {
         return Err("That isn't a server address".into());
     }
-    let with_scheme = if typed.contains("://") { typed.to_string() } else { format!("https://{typed}") };
+    let with_scheme = if typed.contains("://") {
+        typed.to_string()
+    } else {
+        format!("https://{typed}")
+    };
     let url = url::Url::parse(&with_scheme).map_err(|_| "That isn't a server address".to_string())?;
     if !matches!(url.scheme(), "https" | "http") {
         return Err("A server's address starts with https:// (or http:// at home)".into());
@@ -347,18 +376,60 @@ mod tests {
 
     #[test]
     fn payloads_are_written_as_kotlin_writes_them() {
-        let n = Payload::Notification { key: "42".into(), app: "Signal".into(), app_id: "org.signal".into(), title: "Sam".into(), text: "hi".into(), at: 5, icon: None };
-        assert_eq!(n.to_json(), r#"{"type":"notification","key":"42","app":"Signal","appId":"org.signal","title":"Sam","text":"hi","at":5}"#);
+        let n = Payload::Notification {
+            key: "42".into(),
+            app: "Signal".into(),
+            app_id: "org.signal".into(),
+            title: "Sam".into(),
+            text: "hi".into(),
+            at: 5,
+            icon: None,
+        };
+        assert_eq!(
+            n.to_json(),
+            r#"{"type":"notification","key":"42","app":"Signal","appId":"org.signal","title":"Sam","text":"hi","at":5}"#
+        );
         assert_eq!(Payload::Dismiss { key: "42".into() }.to_json(), r#"{"type":"dismiss","key":"42"}"#);
-        assert_eq!(Payload::Clipboard { text: "x".into() }.to_json(), r#"{"type":"clipboard","text":"x"}"#);
-        assert_eq!(Payload::Link { url: "https://a.example/".into(), title: "".into() }.to_json(), r#"{"type":"link","url":"https://a.example/","title":""}"#);
+        assert_eq!(
+            Payload::Clipboard { text: "x".into() }.to_json(),
+            r#"{"type":"clipboard","text":"x"}"#
+        );
+        assert_eq!(
+            Payload::Link {
+                url: "https://a.example/".into(),
+                title: "".into()
+            }
+            .to_json(),
+            r#"{"type":"link","url":"https://a.example/","title":""}"#
+        );
         assert_eq!(Payload::Ring { on: false }.to_json(), r#"{"type":"ring","on":false}"#);
-        let a = Payload::Activity { app: "music".into(), title: Some("Song".into()), detail: "Artist".into(), url: "sammusic://t/1".into(), at: 9 };
-        assert_eq!(a.to_json(), r#"{"type":"activity","app":"music","title":"Song","detail":"Artist","url":"sammusic://t/1","at":9}"#);
+        let a = Payload::Activity {
+            app: "music".into(),
+            title: Some("Song".into()),
+            detail: "Artist".into(),
+            url: "sammusic://t/1".into(),
+            at: 9,
+        };
+        assert_eq!(
+            a.to_json(),
+            r#"{"type":"activity","app":"music","title":"Song","detail":"Artist","url":"sammusic://t/1","at":9}"#
+        );
         // A stopped activity has no title at all (explicitNulls = false).
-        let stopped = Payload::Activity { app: "music".into(), title: None, detail: "".into(), url: "".into(), at: 9 };
-        assert_eq!(stopped.to_json(), r#"{"type":"activity","app":"music","detail":"","url":"","at":9}"#);
-        assert_eq!(Payload::Media { action: "toggle".into() }.to_json(), r#"{"type":"media","action":"toggle"}"#);
+        let stopped = Payload::Activity {
+            app: "music".into(),
+            title: None,
+            detail: "".into(),
+            url: "".into(),
+            at: 9,
+        };
+        assert_eq!(
+            stopped.to_json(),
+            r#"{"type":"activity","app":"music","detail":"","url":"","at":9}"#
+        );
+        assert_eq!(
+            Payload::Media { action: "toggle".into() }.to_json(),
+            r#"{"type":"media","action":"toggle"}"#
+        );
     }
 
     #[test]
@@ -366,17 +437,39 @@ mod tests {
         // Kotlin's output for the protocol's vector, and with defaults left out or nulls spelled out.
         assert_eq!(
             parse_payload(br#"{"type":"clipboard","text":"hello from the aurora"}"#).unwrap(),
-            Some(Payload::Clipboard { text: "hello from the aurora".into() })
+            Some(Payload::Clipboard {
+                text: "hello from the aurora".into()
+            })
         );
         assert_eq!(
             parse_payload(br#"{"type":"notification","key":"k","app":"Signal","at":1}"#).unwrap(),
-            Some(Payload::Notification { key: "k".into(), app: "Signal".into(), app_id: "".into(), title: "".into(), text: "".into(), at: 1, icon: None })
+            Some(Payload::Notification {
+                key: "k".into(),
+                app: "Signal".into(),
+                app_id: "".into(),
+                title: "".into(),
+                text: "".into(),
+                at: 1,
+                icon: None
+            })
         );
         assert_eq!(parse_payload(br#"{"type":"ring"}"#).unwrap(), Some(Payload::Ring { on: true }));
-        assert_eq!(parse_payload(br#"{"type":"link","url":"https://x.example"}"#).unwrap(), Some(Payload::Link { url: "https://x.example".into(), title: "".into() }));
+        assert_eq!(
+            parse_payload(br#"{"type":"link","url":"https://x.example"}"#).unwrap(),
+            Some(Payload::Link {
+                url: "https://x.example".into(),
+                title: "".into()
+            })
+        );
         assert_eq!(
             parse_payload(br#"{"type":"activity","app":"video","title":null,"at":3,"somethingNew":true}"#).unwrap(),
-            Some(Payload::Activity { app: "video".into(), title: None, detail: "".into(), url: "".into(), at: 3 })
+            Some(Payload::Activity {
+                app: "video".into(),
+                title: None,
+                detail: "".into(),
+                url: "".into(),
+                at: 3
+            })
         );
     }
 
@@ -391,12 +484,17 @@ mod tests {
 
     #[test]
     fn frames_are_read_and_unknown_ones_skipped() {
-        let frame: StreamFrame = serde_json::from_value(json!({"type":"message","message":{"id":"m1","from":"d2","fromName":"Pixel","sentAt":7,
-            "sealed":{"epk":"a","nonce":"b","ct":"c"}}}))
+        let frame: StreamFrame = serde_json::from_value(
+            json!({"type":"message","message":{"id":"m1","from":"d2","fromName":"Pixel","sentAt":7,
+            "sealed":{"epk":"a","nonce":"b","ct":"c"}}}),
+        )
         .unwrap();
         match frame {
             StreamFrame::Message { message } => {
-                assert_eq!((message.id.as_str(), message.from.as_deref(), message.from_name.as_str()), ("m1", Some("d2"), "Pixel"));
+                assert_eq!(
+                    (message.id.as_str(), message.from.as_deref(), message.from_name.as_str()),
+                    ("m1", Some("d2"), "Pixel")
+                );
             }
             other => panic!("{other:?}"),
         }
@@ -405,20 +503,34 @@ mod tests {
             "sealed":{"epk":"a","nonce":"b","ct":"c"}}}))
         .unwrap();
         assert!(matches!(web, StreamFrame::Message { message } if message.from.is_none()));
-        let devices: StreamFrame = serde_json::from_value(json!({"type":"devices","devices":[{"id":"d1","name":"Laptop","kind":"LINUX","publicKey":"k",
-            "capabilities":["links"],"online":true,"lastSeenAt":1,"createdAt":1,"battery":{"level":81,"charging":true},"current":true}]}))
+        let devices: StreamFrame = serde_json::from_value(
+            json!({"type":"devices","devices":[{"id":"d1","name":"Laptop","kind":"LINUX","publicKey":"k",
+            "capabilities":["links"],"online":true,"lastSeenAt":1,"createdAt":1,"battery":{"level":81,"charging":true},"current":true}]}),
+        )
         .unwrap();
         assert!(matches!(devices, StreamFrame::Devices { devices } if devices[0].battery == Some(Battery { level: 81, charging: true })));
-        assert!(matches!(serde_json::from_str::<StreamFrame>(r#"{"type":"ping"}"#).unwrap(), StreamFrame::Ping));
-        assert!(matches!(serde_json::from_str::<StreamFrame>(r#"{"type":"later","x":1}"#).unwrap(), StreamFrame::Unknown));
+        assert!(matches!(
+            serde_json::from_str::<StreamFrame>(r#"{"type":"ping"}"#).unwrap(),
+            StreamFrame::Ping
+        ));
+        assert!(matches!(
+            serde_json::from_str::<StreamFrame>(r#"{"type":"later","x":1}"#).unwrap(),
+            StreamFrame::Unknown
+        ));
     }
 
     #[test]
     fn each_kind_is_sent_as_the_protocol_says() {
         let d = delivery(&json!({"type":"clipboard","text":"x"}));
-        assert_eq!((d.capability, d.ttl_seconds, d.collapse_key.as_deref()), (Some("clipboard"), 600, Some("clipboard")));
+        assert_eq!(
+            (d.capability, d.ttl_seconds, d.collapse_key.as_deref()),
+            (Some("clipboard"), 600, Some("clipboard"))
+        );
         let d = delivery(&json!({"type":"activity","app":"music","at":1}));
-        assert_eq!((d.capability, d.ttl_seconds, d.collapse_key.as_deref()), (Some("activity"), 900, Some("activity:music")));
+        assert_eq!(
+            (d.capability, d.ttl_seconds, d.collapse_key.as_deref()),
+            (Some("activity"), 900, Some("activity:music"))
+        );
         let d = delivery(&json!({"type":"notification"}));
         assert_eq!((d.capability, d.ttl_seconds, d.collapse_key), (Some("notifications"), 86_400, None));
         assert_eq!(delivery(&json!({"type":"link"})).ttl_seconds, 604_800);
@@ -432,9 +544,21 @@ mod tests {
         assert_eq!(server_address(" https://o.example.com/ ").unwrap(), "https://o.example.com");
         assert_eq!(server_address("o.example.com").unwrap(), "https://o.example.com");
         assert_eq!(server_address("http://192.168.1.5:8080").unwrap(), "http://192.168.1.5:8080");
-        assert_eq!(server_address("https://example.com/orchestrator/").unwrap(), "https://example.com/orchestrator");
+        assert_eq!(
+            server_address("https://example.com/orchestrator/").unwrap(),
+            "https://example.com/orchestrator"
+        );
         assert!(is_plain_http("http://192.168.1.5:8080") && !is_plain_http("https://o.example.com"));
-        for bad in ["", "ftp://x.example", "file:///etc/passwd", "https://user:pw@x.example", "https://x.example/?a=1", "https://x.example/#f", "https://x .example", "javascript:alert(1)"] {
+        for bad in [
+            "",
+            "ftp://x.example",
+            "file:///etc/passwd",
+            "https://user:pw@x.example",
+            "https://x.example/?a=1",
+            "https://x.example/#f",
+            "https://x .example",
+            "javascript:alert(1)",
+        ] {
             assert!(server_address(bad).is_err(), "{bad}");
         }
         assert_eq!(stream_address("https://o.example.com"), "wss://o.example.com/api/stream");
