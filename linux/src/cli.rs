@@ -12,7 +12,7 @@ use zbus::zvariant::DynamicType;
 
 use crate::api::{self, Device};
 use crate::daemon::{INTERFACE, NAME, PATH};
-use crate::store::Store;
+use crate::store::{Credentials, Store};
 use crate::{links, signin, system};
 
 #[derive(Parser)]
@@ -255,7 +255,10 @@ async fn sign_in(server: &str, token_stdin: bool) -> Result<()> {
         if token.is_empty() || token.chars().any(|c| c.is_whitespace() || c.is_control()) {
             bail!("No token came in on standard input");
         }
-        let credentials = signin::establish(&api::http_client(), &store, &server, token).await?;
+        let http = api::http_client();
+        let before = (store.credentials(), store.config().server);
+        let credentials = signin::establish(&http, &store, &server, token).await?;
+        forget_earlier(&http, before, &credentials).await;
         if let Some(agent) = running {
             agent.call::<_, ()>("Reload", &()).await?;
         }
@@ -272,7 +275,10 @@ async fn sign_in(server: &str, token_stdin: bool) -> Result<()> {
         if let Err(why) = system::open(&waiting.url).await {
             eprintln!("({why})");
         }
-        let credentials = waiting.finish(&api::http_client(), &store).await?;
+        let http = api::http_client();
+        let before = (store.credentials(), store.config().server);
+        let credentials = waiting.finish(&http, &store).await?;
+        forget_earlier(&http, before, &credentials).await;
         println!(
             "{}",
             signed_in_words(&credentials.display_name, &credentials.username, &credentials.device_name)
@@ -312,6 +318,13 @@ async fn sign_in(server: &str, token_stdin: bool) -> Result<()> {
             bail!("Nobody signed in within five minutes. Try again when you're ready.");
         }
         tokio::time::sleep(Duration::from_millis(400)).await;
+    }
+}
+
+/// The sign-in a new one replaced: its device entry goes with it.
+async fn forget_earlier(http: &reqwest::Client, (before, server): (Credentials, String), now: &Credentials) {
+    if let Some(old) = before.token.as_deref().filter(|old| Some(*old) != now.token.as_deref() && !before.device_id.is_empty() && !server.is_empty()) {
+        let _ = api::Api::new(http, &server, Some(old)).delete(&format!("/api/devices/{}", before.device_id)).await;
     }
 }
 

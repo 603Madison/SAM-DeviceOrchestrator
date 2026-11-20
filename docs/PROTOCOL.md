@@ -199,12 +199,21 @@ app starts `app.superawesomemagical.orchestrator.APPROVE` (extra `app`) for a re
 again on `RESULT_OK`. The agent remembers the app's package and signing certificate; a different
 certificate under the same package is a different app and is asked about again.
 
+An app only listens to an answer from the package `app.superawesomemagical.orchestrator`, and
+(once its releases' signing certificate is pinned in the kit) only one signed with it. Until
+then nothing tells the real app from another that took its name on a phone without it, so the
+kit marks a ticket `confirm`: the app shows the server's address and waits for a tap the first
+time, and remembers the answer for that orchestrator app (by certificate) and server. A ticket
+from anything else is never used silently: a family app syncs to whatever server it signs in to.
+
 ## What an app does
 
 1. Not signed in, at start: ask the agent for a ticket (quietly; no agent or nobody signed in:
    show the usual sign-in). With a ticket: `POST <url>/api/auth/orchestrator`, keep the token and
    the server address as if the person had signed in by hand. Any failure: the usual sign-in,
    with no error shown.
+   On Android, a ticket marked `confirm` isn't used at start: the sign-in screen offers
+   "Continue as <name>" with the server's address under it, and tapping it is the confirmation.
 2. The sign-in screen offers "Continue as <name>" when the agent has someone signed in.
 3. Signing out of the app stays signed out (don't sign straight back in: remember the person
    chose to, until they sign in again).

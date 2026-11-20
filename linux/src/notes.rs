@@ -7,6 +7,10 @@ use std::time::{Duration, Instant};
 pub const OWN_DESKTOP_ENTRY: &str = "app.superawesomemagical.Orchestrator";
 pub const MIRRORED_HINT: &str = "x-sam-mirrored";
 
+/// Apps whose notifications never leave this computer, whatever the settings say: password
+/// managers and one-time-code apps (matched anywhere in the app's name or desktop entry).
+pub const ALWAYS_PRIVATE: &[&str] = &["keepass", "bitwarden", "1password", "proton pass", "protonpass", "seahorse", "keyring", "authenticator", "kwallet"];
+
 const MAX_TITLE: usize = 200;
 const MAX_TEXT: usize = 2000;
 const MAX_APP: usize = 100;
@@ -51,7 +55,8 @@ pub fn outgoing(seen: &Seen, never: &[String]) -> Option<Outgoing> {
     let app_name = plain(&seen.app_name);
     let app_id = plain(&seen.desktop_entry);
     let excluded = |name: &str| !name.is_empty() && never.iter().any(|n| n.trim().to_lowercase() == name.to_lowercase());
-    if excluded(&app_name) || excluded(&app_id) {
+    let private = |name: &str| ALWAYS_PRIVATE.iter().any(|p| name.to_lowercase().contains(p));
+    if excluded(&app_name) || excluded(&app_id) || private(&app_name) || private(&app_id) {
         return None;
     }
     let app = if !app_name.is_empty() {
@@ -363,6 +368,8 @@ mod tests {
             "excluded by its id"
         );
         assert!(outgoing(&base, &["Signal Beta".into(), "".into()]).is_some(), "only the apps named");
+        assert!(outgoing(&seen("KeePassXC", "Database unlocked", "x"), &[]).is_none(), "a password manager's, always");
+        assert!(outgoing(&Seen { desktop_entry: "com.bitwarden.desktop".into(), ..seen("", "Copied", "x") }, &[]).is_none());
         assert!(outgoing(&seen("Signal", "", ""), &[]).is_none(), "an empty one");
         assert!(
             outgoing(&seen("Signal", "  ", "<b></b>\n"), &[]).is_none(),

@@ -55,7 +55,8 @@ sign-in (the device's token and private key) is in
 - **Notifications out.** It watches the session bus as a monitor, so it works with whatever
   shows notifications (on SuperAwesomeMagicalLinux, the shell). Never mirrored: its own, ones
   that came from another device (the `x-sam-mirrored` hint), transient ones, empty ones, and
-  the apps in `neverMirror`. One that updates many times a second is sent at most once every
+  the apps in `neverMirror`, and password managers and one-time-code apps whatever the settings
+  say (`ALWAYS_PRIVATE` in `src/notes.rs`). One that updates many times a second is sent at most once every
   two seconds. Closing or dismissing one here removes it from the other devices; one that only
   times out here stays there.
 - **Notifications in** are shown as "App · Device name", with the `x-sam-mirrored` hint.
