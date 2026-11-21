@@ -57,13 +57,19 @@ enum Command {
     /// Open a link on another device
     SendLink {
         /// The device's name (or the start of it), or its id
+        // An id can start with a dash: it's still a device, never an option.
+        #[arg(allow_hyphen_values = true)]
         device: String,
         url: String,
     },
     /// Put this computer's clipboard on another device (or all of them)
-    SendClipboard { device: Option<String> },
+    SendClipboard {
+        #[arg(allow_hyphen_values = true)]
+        device: Option<String>,
+    },
     /// Make a device ring until it's found
     Ring {
+        #[arg(allow_hyphen_values = true)]
         device: String,
         /// Stop it ringing
         #[arg(long)]
