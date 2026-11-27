@@ -86,8 +86,11 @@ image build follows the newest), pushes the image to
 The APK must always be signed with the same key (alias `orchestrator`). The key is not in git: CI
 reads `RELEASE_KEYSTORE_BASE64` and `RELEASE_KEYSTORE_PASSWORD` from repository secrets, local
 builds read `keystore/release.properties` (git-ignored). Never generate a replacement for an
-existing key. Until the secrets exist the release's `android` job fails (saying so) and the rest
-still publishes. To make the first key (once, the owner):
+existing key. Its certificate's SHA-256 is
+`86:86:B8:72:1C:2D:85:4E:21:1C:22:65:F4:6A:DB:9A:22:7A:64:0C:45:CD:0B:94:5E:EB:96:8E:7F:37:49:1A`,
+and that's pinned in `kits/android/OrchestratorLink.kt` (`PINNED_CERTIFICATES`), so the family's
+apps only listen to an orchestrator app signed with it. Without the secrets the release's
+`android` job fails (saying so) and the rest still publishes. How the key was made (once):
 
 ```bash
 keytool -genkeypair -v -keystore release.jks -alias orchestrator -keyalg RSA -keysize 4096 -validity 36500

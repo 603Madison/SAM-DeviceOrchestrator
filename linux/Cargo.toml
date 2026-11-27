@@ -1,6 +1,6 @@
 [package]
 name = "sam-orchestrator"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "SuperAwesomeMagicalOrchestrator's agent for the Linux desktop: one sign-in for every app, and your devices working together"
 license = "GPL-3.0-only"
